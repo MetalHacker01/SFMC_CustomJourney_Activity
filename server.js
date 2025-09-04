@@ -9,11 +9,11 @@ const PORT = process.env.PORT || 3000;
 
 // Fallback route for /config.html
 app.get('/config.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'config.html'));
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 // Serve /config/index.html for SFMC iframe loader
 app.get('/config/index.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'config.html'));
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // Add detailed request logging
@@ -39,7 +39,7 @@ const appExtensionKey = process.env.APP_EXTENSION_KEY;
 
 // Serve the configuration page
 app.get('/config', (req, res) => {
-    res.sendFile(path.join(__dirname, 'config.html'));
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
     
     // Serve config.json for Journey Builder
