@@ -7,14 +7,51 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Fallback route for /config.html
-app.get('/config.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'config', 'index.html'));
+// Add this to the TOP of your existing server.js file
+const path = require('path');
+
+// Add this BEFORE your route definitions
+// CRITICAL: Serve static files from config directory
+app.use('/config', express.static(path.join(__dirname, 'config')));
+app.use('/public', express.static(path.join(__dirname, 'public')));
+
+// Add this route to serve your activity-config.json at the expected path
+app.get('/config/config.json', (req, res) => {
+    res.sendFile(path.join(__dirname, 'activity-config.json'));
 });
-// Serve /config/index.html for SFMC iframe loader
-app.get('/config/index.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'config', 'index.html'));
+
+// ❌ WRONG - Extra closing brace
+app.get('/execute', (req, res) => {
+    // some code
+    }
+} // ← This extra } causes the error
+
+// ✅ CORRECT
+app.get('/execute', (req, res) => {
+    // some code
 });
+
+// ❌ WRONG - Missing opening brace
+app.get('/execute', (req, res) => 
+    // some code
+    res.json({success: true});
+});
+
+// ✅ CORRECT
+app.get('/execute', (req, res) => {
+    // some code
+    res.json({success: true});
+});
+
+// ❌ WRONG - Incomplete object/function
+const config = {
+    name: 'test'
+    // Missing closing }
+
+// ✅ CORRECT
+const config = {
+    name: 'test'
+};
 
 // Add detailed request logging
 
