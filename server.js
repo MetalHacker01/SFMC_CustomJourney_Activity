@@ -1,3 +1,7 @@
+// Fallback route for /config.html
+app.get('/config.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'config.html'));
+});
 // Serve /config/index.html for SFMC iframe loader
 app.get('/config/index.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'config.html'));
