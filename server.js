@@ -17,15 +17,11 @@ app.get('/config/index.html', (req, res) => {
 });
 
 // Add detailed request logging
-app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
-    console.log('Headers:', req.headers);
-    if (req.body && Object.keys(req.body).length > 0) {
+
+    // Serve the config directory statically for all /config/* requests
+    app.use('/config', express.static(path.join(__dirname, 'config')));
         console.log('Body:', JSON.stringify(req.body, null, 2));
     }
-    next();
-});
-
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
