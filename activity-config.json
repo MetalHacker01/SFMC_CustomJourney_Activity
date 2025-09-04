@@ -65,8 +65,7 @@
   "configModal": {
     "height": 600,
     "width": 800,
-    "fullscreen": false,
-    "url": "https://sfmc-customjourney-activity.onrender.com/config/index.html"
+    "fullscreen": false
   }
   },
   "schema": {

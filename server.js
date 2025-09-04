@@ -3,296 +3,73 @@ const bodyParser = require('body-parser');
 const path = require('path');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
+require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Add this to the TOP of your existing server.js file
-const path = require('path');
-
-// Add this BEFORE your route definitions
-// CRITICAL: Serve static files from config directory
-app.use('/config', express.static(path.join(__dirname, 'config')));
-app.use('/public', express.static(path.join(__dirname, 'public')));
-
-// Add this route to serve your activity-config.json at the expected path
-app.get('/config/config.json', (req, res) => {
-    res.sendFile(path.join(__dirname, 'activity-config.json'));
-});
-
-// ❌ WRONG - Extra closing brace
-app.get('/execute', (req, res) => {
-    // some code
-    }
-} // ← This extra } causes the error
-
-// ✅ CORRECT
-app.get('/execute', (req, res) => {
-    // some code
-});
-
-// ❌ WRONG - Missing opening brace
-app.get('/execute', (req, res) => 
-    // some code
-    res.json({success: true});
-});
-
-// ✅ CORRECT
-app.get('/execute', (req, res) => {
-    // some code
-    res.json({success: true});
-});
-
-// ❌ WRONG - Incomplete object/function
-const config = {
-    name: 'test'
-    // Missing closing }
-
-// ✅ CORRECT
-const config = {
-    name: 'test'
-};
+// Your app's secret from Marketing Cloud App Center
+const jwtSecret = process.env.JWT_SECRET;
+const appExtensionKey = process.env.APP_EXTENSION_KEY;
 
 // Add detailed request logging
-
-    // Serve the config directory statically for all /config/* requests
-    app.use('/config', express.static(path.join(__dirname, 'config')));
+app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    console.log('Headers:', req.headers);
+    if (req.body && Object.keys(req.body).length > 0) {
         console.log('Body:', JSON.stringify(req.body, null, 2));
     }
+    next();
+});
+
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.static('public'));
 
-// Your app's secret from Marketing Cloud App Center
-require('dotenv').config();
-const jwtSecret = process.env.JWT_SECRET;
-const appExtensionKey = process.env.APP_EXTENSION_KEY;
+// Serve static files - ORDER MATTERS!
+app.use(express.static('public'));
+app.use('/config', express.static(path.join(__dirname, 'config')));
 
 // Serve the configuration page
 app.get('/config', (req, res) => {
+    console.log('Config page requested');
     res.sendFile(path.join(__dirname, 'config', 'index.html'));
 });
-    
-    // Serve config.json for Journey Builder
-    app.get('/config/config.json', (req, res) => {
-        console.log('Config JSON requested');
-        const config = {
-            workflowApiVersion: "1.1",
-            metaData: {
-                icon: "https://raw.githubusercontent.com/mallowigi/a-file-icon-vscode/master/logo.png?sanitize=true",
-                category: "message",
-                displayName: "Custom Flag Activity",
-                description: "A simple custom activity that adds flags and logs contact processing"
-            },
-            type: "REST",
-            lang: {
-                "en-US": {
-                    name: "Custom Flag Activity",
-                    description: "Adds custom flags and processes contacts in Journey Builder"
-                }
-            },
-            arguments: {
-                execute: {
-                    inArguments: [
-                        {
-                            contactKey: "{{Contact.Key}}",
-                            emailAddress: "{{InteractionDefaults.Email}}",
-                            firstName: "{{Contact.Attribute.Demographics.FirstName}}",
-                            lastName: "{{Contact.Attribute.Demographics.LastName}}"
-                        }
-                    ],
-                    outArguments: [],
-                    url: `https://sfmc-customjourney-activity.onrender.com/execute`,
-                    verb: "POST",
-                    body: "",
-                    format: "json",
-                    useJwt: true,
-                    timeout: 10000
-                }
-            },
-            configurationArguments: {
-                applicationExtensionKey: appExtensionKey,
-                save: {
-                    url: `https://sfmc-customjourney-activity.onrender.com/save`,
-                    verb: "POST",
-                    useJwt: true
-                },
-                publish: {
-                    url: `https://sfmc-customjourney-activity.onrender.com/publish`,
-                    verb: "POST",
-                    useJwt: true
-                },
-                validate: {
-                    url: `https://sfmc-customjourney-activity.onrender.com/validate`,
-                    verb: "POST",
-                    useJwt: true
-                },
-                stop: {
-                    url: `https://sfmc-customjourney-activity.onrender.com/stop`,
-                    verb: "POST",
-                    useJwt: true
-                }
-            },
-            wizardSteps: [
-                {
-                    label: "Configure Activity",
-                    key: "step1"
-                }
-            ],
-            userInterfaces: {
-                configModal: {
-                    height: 600,
-                    width: 800,
-                    fullscreen: false
-                }
-            }
-        };
-        res.json(config);
-    });
-    
-    // Serve config.js for Journey Builder
-    app.get('/config/config.js', (req, res) => {
-        console.log('Config JS requested');
-        const configJs = `
-        // Direct config.json for SFMC (no /config prefix)
-        app.get('/config.json', (req, res) => {
-            console.log('Direct /config.json requested');
-            // Reuse the same config as /config/config.json
-            const config = {
-                workflowApiVersion: "1.1",
-                metaData: {
-                    icon: "https://raw.githubusercontent.com/mallowigi/a-file-icon-vscode/master/logo.png?sanitize=true",
-                    category: "message",
-                    displayName: "Custom Flag Activity",
-                    description: "A simple custom activity that adds flags and logs contact processing"
-                },
-                type: "REST",
-                lang: {
-                    "en-US": {
-                        name: "Custom Flag Activity",
-                        description: "Adds custom flags and processes contacts in Journey Builder"
-                    }
-                },
-                arguments: {
-                    execute: {
-                        inArguments: [
-                            {
-                                contactKey: "{{Contact.Key}}",
-                                emailAddress: "{{InteractionDefaults.Email}}",
-                                firstName: "{{Contact.Attribute.Demographics.FirstName}}",
-                                lastName: "{{Contact.Attribute.Demographics.LastName}}"
-                            }
-                        ],
-                        outArguments: [],
-                        url: `https://sfmc-customjourney-activity.onrender.com/execute`,
-                        verb: "POST",
-                        body: "",
-                        format: "json",
-                        useJwt: true,
-                        timeout: 10000
-                    }
-                },
-                configurationArguments: {
-                    applicationExtensionKey: appExtensionKey,
-                    save: {
-                        url: `https://sfmc-customjourney-activity.onrender.com/save`,
-                        verb: "POST",
-                        useJwt: true
-                    },
-                    publish: {
-                        url: `https://sfmc-customjourney-activity.onrender.com/publish`,
-                        verb: "POST",
-                        useJwt: true
-                    },
-                    validate: {
-                        url: `https://sfmc-customjourney-activity.onrender.com/validate`,
-                        verb: "POST",
-                        useJwt: true
-                    },
-                    stop: {
-                        url: `https://sfmc-customjourney-activity.onrender.com/stop`,
-                        verb: "POST",
-                        useJwt: true
-                    }
-                },
-                wizardSteps: [
-                    {
-                        label: "Configure Activity",
-                        key: "step1"
-                    }
-                ],
-                userInterfaces: {
-                    configModal: {
-                        height: 600,
-                        width: 800,
-                        fullscreen: false
-                    }
-                }
-            };
-            res.json(config);
-        });
 
-        // Direct config.js for SFMC (no /config prefix)
-        app.get('/config.js', (req, res) => {
-            console.log('Direct /config.js requested');
-            // Reuse the same JS as /config/config.js
-            const configJs = `
-            // Custom Activity Configuration
-            define(['postmonger'], function (Postmonger) {
-                'use strict';
-                var connection = new Postmonger.Session();
-                var authTokens = {};
-                var payload = {};
-                $(window).ready(onRender);
-                connection.on('initActivity', initialize);
-                connection.on('requestedTokens', onGetTokens);
-                connection.on('requestedEndpoints', onGetEndpoints);
-                connection.trigger('ready');
-                function onRender() {
-                    connection.trigger('requestTokens');
-                    connection.trigger('requestEndpoints');
-                }
-                function initialize(data) {
-                    if (data) { payload = data; }
-                    var hasInArguments = Boolean(
-                        payload['arguments'] &&
-                        payload['arguments'].execute &&
-                        payload['arguments'].execute.inArguments &&
-                        payload['arguments'].execute.inArguments.length > 0
-                    );
-                    var inArguments = hasInArguments ? payload['arguments'].execute.inArguments : {};
-                    console.log(inArguments);
-                    connection.trigger('updateButton', { button: 'next', text: 'done', visible: true });
-                }
-                function onGetTokens(tokens) {
-                    console.log(tokens);
-                    authTokens = tokens;
-                }
-                function onGetEndpoints(endpoints) {
-                    console.log(endpoints);
-                }
-                function save() {
-                    var customFlag = $('#customFlag').val();
-                    var customMessage = $('#customMessage').val();
-                    payload['arguments'].execute.inArguments = [{
-                        "tokens": authTokens,
-                        "customFlag": customFlag,
-                        "customMessage": customMessage
-                    }];
-                    payload['metaData'].isConfigured = true;
-                    connection.trigger('updateActivity', payload);
-                }
-                return { save: save };
-            });
-        `;
-            res.set('Content-Type', 'application/javascript');
-            res.send(configJs);
+// Serve config.json for Journey Builder
+app.get('/config/config.json', (req, res) => {
+    console.log('Config JSON requested');
+    res.sendFile(path.join(__dirname, 'activity-config.json'));
+});
+
+// Alternative route for config.json (some SFMC versions expect this)
+app.get('/config.json', (req, res) => {
+    console.log('Direct config.json requested');
+    res.sendFile(path.join(__dirname, 'activity-config.json'));
+});
+
+// Save endpoint - called when user saves configuration
+app.post('/save', (req, res) => {
+    console.log('Save endpoint called');
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    
+    try {
+        // Here you can save the configuration to your database
+        // For now, just acknowledge the save
+        res.status(200).json({
+            status: 'success',
+            message: 'Configuration saved successfully'
         });
-        res.set('Content-Type', 'application/javascript');
-        res.send(configJs);
-    });
+        
+    } catch (error) {
+        console.error('Error in save endpoint:', error);
+        res.status(400).json({
+            status: 'error',
+            message: error.message
+        });
+    }
+});
 
 // Execute endpoint - called when contact enters the activity
 app.post('/execute', (req, res) => {
@@ -407,34 +184,36 @@ app.post('/stop', (req, res) => {
 app.get('/health', (req, res) => {
     res.status(200).json({
         status: 'healthy',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        environment: {
+            nodeVersion: process.version,
+            port: PORT,
+            jwtSecretConfigured: !!jwtSecret,
+            appExtensionKeyConfigured: !!appExtensionKey
+        }
+    });
+});
+
+// Test endpoint to verify static file serving
+app.get('/test', (req, res) => {
+    res.json({
+        message: 'Server is working correctly',
+        availableRoutes: [
+            'GET /health',
+            'GET /config',
+            'GET /config/config.json',
+            'GET /config.json',
+            'POST /save',
+            'POST /execute',
+            'POST /publish',
+            'POST /validate',
+            'POST /stop'
+        ]
     });
 });
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
     console.log(`Configuration URL: https://sfmc-customjourney-activity.onrender.com/config`);
+    console.log(`Health check: https://sfmc-customjourney-activity.onrender.com/health`);
 });
-
-// Package.json dependencies needed:
-/*
-{
-  "name": "jb-custom-activity",
-  "version": "1.0.0",
-  "description": "Basic Journey Builder Custom Activity",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
-  },
-  "dependencies": {
-    "express": "^4.18.2",
-    "body-parser": "^1.20.2",
-    "jsonwebtoken": "^9.0.2",
-    "cors": "^2.8.5"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.1"
-  }
-}
-*/
