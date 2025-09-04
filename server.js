@@ -1,3 +1,7 @@
+// Serve /config/index.html for SFMC iframe loader
+app.get('/config/index.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'config.html'));
+});
 const express = require('express');
 const bodyParser = require('body-parser');
 const path = require('path');
