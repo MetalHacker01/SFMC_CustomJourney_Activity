@@ -19,8 +19,7 @@
         {
           "contactKey": "{{Contact.Key}}",
           "emailAddress": "{{InteractionDefaults.Email}}",
-          "firstName": "{{Contact.Attribute.Demographics.FirstName}}",
-          "lastName": "{{Contact.Attribute.Demographics.LastName}}"
+          "customMessage": ""
         }
       ],
       "outArguments": [],

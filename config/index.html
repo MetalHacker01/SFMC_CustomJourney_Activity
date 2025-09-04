@@ -77,44 +77,35 @@
    <body>
       <div class="container">
          <div class="config-section">
-            <h2>Custom Activity Configuration</h2>
-            <p>Configure your custom journey activity settings below.</p>
-
+            <h2>Data Extension Update Activity</h2>
+            <p>This activity will update the <strong>CustomText</strong> field in your entry source data extension with a custom message.</p>
+            
             <div class="form-group">
                <label for="activity-name">Activity Name:</label>
                <input type="text" id="activity-name"
-                  placeholder="Enter activity name" value="My Custom Activity">
+                  placeholder="Enter activity name" value="Update CustomText Field">
             </div>
 
             <div class="form-group">
-               <label for="message-text">Message:</label>
-               <textarea id="message-text" rows="3"
-                  placeholder="Enter your custom message">Hello from custom activity!</textarea>
+               <label for="message-text">Custom Message for CustomText Field:</label>
+               <textarea id="message-text" rows="3" required
+                  placeholder="Enter the message to write to the CustomText field">Contact processed by custom journey activity</textarea>
+               <small style="color: #666;">This message will be written to the CustomText field in the Master_Subscriber data extension.</small>
             </div>
-
+            
             <div class="form-group">
-               <label for="execution-timeout">Execution Timeout (ms):</label>
-               <input type="number" id="execution-timeout" value="60000"
-                  min="1000" max="100000">
-            </div>
-
-            <div class="form-group">
-               <label for="retry-count">Retry Count:</label>
-               <select id="retry-count">
-                  <option value="0">0</option>
-                  <option value="1">1</option>
-                  <option value="2">2</option>
-                  <option value="3">3</option>
-                  <option value="4">4</option>
-                  <option value="5">5</option>
-               </select>
+               <label>Target Data Extension:</label>
+               <p style="margin: 5px 0; padding: 10px; background: #f4f6f9; border-radius: 4px; font-family: monospace;">
+                  <strong>Name:</strong> Master_Subscriber<br>
+                  <strong>External Key:</strong> 3010F472-DE73-4A74-BB75-5FD96D878E75<br>
+                  <strong>Field to Update:</strong> CustomText
+               </p>
             </div>
          </div>
 
          <div class="config-section">
-            <button id="save-config" class="btn">Save Configuration</button>
-            <span id="status-message"
-               style="margin-left: 15px; color: #4bca81;"></span>
+            <p><strong>Note:</strong> Click "Done" in Journey Builder to save your configuration.</p>
+            <span id="status-message" style="color: #4bca81;"></span>
          </div>
       </div>
 
@@ -133,65 +124,62 @@
             activityPayload = payload;
             
             // Populate form with existing configuration
-            if (payload.configurationArguments) {
-                const config = payload.configurationArguments;
+            if (payload.arguments && payload.arguments.execute && payload.arguments.execute.inArguments && payload.arguments.execute.inArguments.length > 0) {
+                const inArgs = payload.arguments.execute.inArguments[0];
                 
-                if (config.activityName) {
-                    document.getElementById('activity-name').value = config.activityName;
-                }
-                if (config.messageText) {
-                    document.getElementById('message-text').value = config.messageText;
-                }
-                if (config.executionTimeout) {
-                    document.getElementById('execution-timeout').value = config.executionTimeout;
-                }
-                if (config.retryCount) {
-                    document.getElementById('retry-count').value = config.retryCount;
+                if (inArgs.customMessage) {
+                    document.getElementById('message-text').value = inArgs.customMessage;
                 }
             }
             
-            // Enable save button
-            document.getElementById('save-config').disabled = false;
-        });
-        
-        // Handle save button click
-        document.getElementById('save-config').addEventListener('click', function() {
-            const config = {
-                activityName: document.getElementById('activity-name').value,
-                messageText: document.getElementById('message-text').value,
-                executionTimeout: parseInt(document.getElementById('execution-timeout').value),
-                retryCount: parseInt(document.getElementById('retry-count').value)
-            };
+            // Tell Journey Builder we're ready and enable the Done button
+            connection.trigger('updateButton', { button: 'next', enabled: true });
             
-            // Update activity payload
-            activityPayload.configurationArguments = config;
-            activityPayload.name = config.activityName;
-            
-            // Define what data to pass to execute endpoint
-            activityPayload.arguments.execute.inArguments = [{
-                activityName: config.activityName,
-                messageText: config.messageText,
-                executionTimeout: config.executionTimeout,
-                retryCount: config.retryCount,
-                contactKey: "{{Contact.Key}}",
-                emailAddress: "{{Contact.Attribute.EmailAddress}}"
-            }];
-            
-            // Send configuration back to Journey Builder
-            connection.trigger('updateActivity', activityPayload);
-            
-            // Show success message
-            document.getElementById('status-message').textContent = 'Configuration saved!';
+            document.getElementById('status-message').textContent = 'Configuration loaded successfully';
             setTimeout(() => {
                 document.getElementById('status-message').textContent = '';
-            }, 3000);
+            }, 2000);
         });
         
-        // Listen for form field changes to enable real-time validation
+        // Listen for when Journey Builder wants to save (Done button clicked)
+        connection.on('clickedNext', function() {
+            save();
+        });
+        
+        // Save function - called when Done is clicked
+        function save() {
+            const customMessage = document.getElementById('message-text').value || 'Default custom message';
+            
+            // Update the activity payload with our configuration
+            activityPayload.name = document.getElementById('activity-name').value || 'Custom Data Extension Update';
+            
+            // Set the arguments that will be passed to the execute endpoint
+            activityPayload.arguments.execute.inArguments = [{
+                contactKey: "{{Contact.Key}}",
+                emailAddress: "{{InteractionDefaults.Email}}",
+                customMessage: customMessage
+            }];
+            
+            // Mark as configured
+            activityPayload.metaData.isConfigured = true;
+            
+            // Send the updated activity back to Journey Builder
+            connection.trigger('updateActivity', activityPayload);
+            
+            console.log('Activity configuration saved:', activityPayload);
+        }
+        
+        // Listen for form field changes to validate in real-time
         document.querySelectorAll('input, textarea, select').forEach(element => {
-            element.addEventListener('change', function() {
-                // You can add validation logic here
-                console.log('Configuration changed');
+            element.addEventListener('input', function() {
+                // Enable/disable Done button based on validation
+                const messageText = document.getElementById('message-text').value;
+                const isValid = messageText.trim().length > 0;
+                
+                connection.trigger('updateButton', { 
+                    button: 'next', 
+                    enabled: isValid 
+                });
             });
         });
         
