@@ -23,12 +23,15 @@
         }
       ],
       "outArguments": [],
-  "url": "https://sfmc-customjourney-activity.onrender.com/execute",
+      "url": "https://sfmc-customjourney-activity.onrender.com/execute",
       "verb": "POST",
       "body": "",
       "format": "json",
       "useJwt": true,
-      "timeout": 10000
+      "timeout": 30000,
+      "retryCount": 3,
+      "retryDelay": 1000,
+      "concurrentRequests": 50
     }
   },
   "configurationArguments": {
