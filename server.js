@@ -114,6 +114,89 @@ app.get('/config', (req, res) => {
     app.get('/config/config.js', (req, res) => {
         console.log('Config JS requested');
         const configJs = `
+        // Direct config.json for SFMC (no /config prefix)
+        app.get('/config.json', (req, res) => {
+            console.log('Direct /config.json requested');
+            // Reuse the same config as /config/config.json
+            const config = {
+                workflowApiVersion: "1.1",
+                metaData: {
+                    icon: "https://raw.githubusercontent.com/mallowigi/a-file-icon-vscode/master/logo.png?sanitize=true",
+                    category: "message",
+                    displayName: "Custom Flag Activity",
+                    description: "A simple custom activity that adds flags and logs contact processing"
+                },
+                type: "REST",
+                lang: {
+                    "en-US": {
+                        name: "Custom Flag Activity",
+                        description: "Adds custom flags and processes contacts in Journey Builder"
+                    }
+                },
+                arguments: {
+                    execute: {
+                        inArguments: [
+                            {
+                                contactKey: "{{Contact.Key}}",
+                                emailAddress: "{{InteractionDefaults.Email}}",
+                                firstName: "{{Contact.Attribute.Demographics.FirstName}}",
+                                lastName: "{{Contact.Attribute.Demographics.LastName}}"
+                            }
+                        ],
+                        outArguments: [],
+                        url: `https://sfmc-customjourney-activity.onrender.com/execute`,
+                        verb: "POST",
+                        body: "",
+                        format: "json",
+                        useJwt: true,
+                        timeout: 10000
+                    }
+                },
+                configurationArguments: {
+                    applicationExtensionKey: appExtensionKey,
+                    save: {
+                        url: `https://sfmc-customjourney-activity.onrender.com/save`,
+                        verb: "POST",
+                        useJwt: true
+                    },
+                    publish: {
+                        url: `https://sfmc-customjourney-activity.onrender.com/publish`,
+                        verb: "POST",
+                        useJwt: true
+                    },
+                    validate: {
+                        url: `https://sfmc-customjourney-activity.onrender.com/validate`,
+                        verb: "POST",
+                        useJwt: true
+                    },
+                    stop: {
+                        url: `https://sfmc-customjourney-activity.onrender.com/stop`,
+                        verb: "POST",
+                        useJwt: true
+                    }
+                },
+                wizardSteps: [
+                    {
+                        label: "Configure Activity",
+                        key: "step1"
+                    }
+                ],
+                userInterfaces: {
+                    configModal: {
+                        height: 600,
+                        width: 800,
+                        fullscreen: false
+                    }
+                }
+            };
+            res.json(config);
+        });
+
+        // Direct config.js for SFMC (no /config prefix)
+        app.get('/config.js', (req, res) => {
+            console.log('Direct /config.js requested');
+            // Reuse the same JS as /config/config.js
+            const configJs = `
             // Custom Activity Configuration
             define(['postmonger'], function (Postmonger) {
                 'use strict';
@@ -162,6 +245,9 @@ app.get('/config', (req, res) => {
                 return { save: save };
             });
         `;
+            res.set('Content-Type', 'application/javascript');
+            res.send(configJs);
+        });
         res.set('Content-Type', 'application/javascript');
         res.send(configJs);
     });
@@ -285,7 +371,7 @@ app.get('/health', (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
-    console.log(`Configuration URL: https://nc1mkfbz-3000.euw.devtunnels.ms/config`);
+    console.log(`Configuration URL: https://sfmc-customjourney-activity.onrender.com/config`);
 });
 
 // Package.json dependencies needed:
