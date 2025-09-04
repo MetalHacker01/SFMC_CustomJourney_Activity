@@ -62,7 +62,7 @@ app.get('/config', (req, res) => {
                         }
                     ],
                     outArguments: [],
-                    url: `https://${req.get('host')}/execute`,
+                    url: `https://sfmc-customjourney-activity.onrender.com/execute`,
                     verb: "POST",
                     body: "",
                     format: "json",
@@ -73,22 +73,22 @@ app.get('/config', (req, res) => {
             configurationArguments: {
                 applicationExtensionKey: appExtensionKey,
                 save: {
-                    url: `https://${req.get('host')}/save`,
+                    url: `https://sfmc-customjourney-activity.onrender.com/save`,
                     verb: "POST",
                     useJwt: true
                 },
                 publish: {
-                    url: `https://${req.get('host')}/publish`,
+                    url: `https://sfmc-customjourney-activity.onrender.com/publish`,
                     verb: "POST",
                     useJwt: true
                 },
                 validate: {
-                    url: `https://${req.get('host')}/validate`,
+                    url: `https://sfmc-customjourney-activity.onrender.com/validate`,
                     verb: "POST",
                     useJwt: true
                 },
                 stop: {
-                    url: `https://${req.get('host')}/stop`,
+                    url: `https://sfmc-customjourney-activity.onrender.com/stop`,
                     verb: "POST",
                     useJwt: true
                 }

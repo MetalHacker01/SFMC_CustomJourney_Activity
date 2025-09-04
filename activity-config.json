@@ -24,7 +24,7 @@
         }
       ],
       "outArguments": [],
-  "url": "https://nc1mkfbz-3000.euw.devtunnels.ms/execute",
+  "url": "https://sfmc-customjourney-activity.onrender.com/execute",
       "verb": "POST",
       "body": "",
       "format": "json",
@@ -35,22 +35,22 @@
   "configurationArguments": {
   "applicationExtensionKey": "a21d9560-1a53-40dc-b70e-df88851a07fb",
     "save": {
-  "url": "https://nc1mkfbz-3000.euw.devtunnels.ms/save",
+  "url": "https://sfmc-customjourney-activity.onrender.com/save",
       "verb": "POST",
       "useJwt": true
     },
     "publish": {
-  "url": "https://nc1mkfbz-3000.euw.devtunnels.ms/publish", 
+  "url": "https://sfmc-customjourney-activity.onrender.com/publish", 
       "verb": "POST",
       "useJwt": true
     },
     "validate": {
-  "url": "https://nc1mkfbz-3000.euw.devtunnels.ms/validate",
+  "url": "https://sfmc-customjourney-activity.onrender.com/validate",
       "verb": "POST",
       "useJwt": true
     },
     "stop": {
-  "url": "https://nc1mkfbz-3000.euw.devtunnels.ms/stop",
+  "url": "https://sfmc-customjourney-activity.onrender.com/stop",
       "verb": "POST", 
       "useJwt": true
     }
