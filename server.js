@@ -79,14 +79,43 @@ async function updateDataExtensionRow(contactKey, customMessage) {
 app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
     console.log('Headers:', req.headers);
-    if (req.body && Object.keys(req.body).length > 0) {
-        console.log('Body:', JSON.stringify(req.body, null, 2));
+    
+    if (req.body) {
+        if (typeof req.body === 'string') {
+            console.log('Body (string):', req.body.substring(0, 200) + '...');
+        } else if (Object.keys(req.body).length > 0) {
+            console.log('Body (object):', JSON.stringify(req.body, null, 2));
+        } else {
+            console.log('Body: empty object');
+        }
+    } else {
+        console.log('Body: null/undefined');
     }
     next();
 });
 
 // Middleware
 app.use(cors());
+
+// Custom middleware to handle JWT tokens sent as raw text
+app.use((req, res, next) => {
+    const contentType = req.headers['content-type'];
+    
+    if (contentType === 'application/jwt' || contentType === 'text/plain') {
+        let body = '';
+        req.on('data', chunk => {
+            body += chunk.toString();
+        });
+        req.on('end', () => {
+            console.log(`Raw ${contentType} token received:`, body.substring(0, 100) + '...');
+            req.body = { jwt: body.trim() };
+            next();
+        });
+    } else {
+        next();
+    }
+});
+
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -183,26 +212,44 @@ app.post('/execute', async (req, res) => {
     console.log('Request body:', JSON.stringify(req.body, null, 2));
     
     try {
-        // Validate that we have a JWT token
-        const token = req.body.keyValue || req.body.jwt;
+        // Extract JWT token from various possible locations
+        const token = req.body.keyValue || req.body.jwt || req.body;
+        
+        console.log('Token extraction debug:', {
+            hasKeyValue: !!req.body.keyValue,
+            hasJwt: !!req.body.jwt,
+            bodyType: typeof req.body,
+            bodyKeys: Object.keys(req.body || {}),
+            contentType: req.headers['content-type']
+        });
+        
         if (!token) {
             console.error('No JWT token provided in execute request');
-            return res.status(400).json({
+            // Return 200 with error to prevent journey failure
+            return res.status(200).json({
                 status: 'error',
-                message: 'No JWT token provided'
+                message: 'No JWT token provided - contact will continue in journey',
+                timestamp: new Date().toISOString()
             });
         }
         
         // Decode the JWT token to get contact and journey data
         let decoded;
         try {
-            decoded = jwt.verify(token, jwtSecret);
+            // Handle case where token might be a string or object
+            const tokenString = typeof token === 'string' ? token : token.toString();
+            decoded = jwt.verify(tokenString, jwtSecret);
             console.log('JWT decoded successfully in execute');
         } catch (jwtError) {
             console.error('JWT validation failed in execute:', jwtError.message);
-            return res.status(401).json({
+            console.error('Token preview:', typeof token === 'string' ? token.substring(0, 100) : 'Not a string');
+            
+            // Return 200 with error to prevent journey failure
+            return res.status(200).json({
                 status: 'error',
-                message: 'Invalid JWT token'
+                message: 'Invalid JWT token - contact will continue in journey',
+                error: jwtError.message,
+                timestamp: new Date().toISOString()
             });
         }
         
@@ -438,6 +485,42 @@ app.get('/ping', (req, res) => {
 
 app.post('/ping', (req, res) => {
     res.status(200).send('pong');
+});
+
+// Test JWT parsing endpoint
+app.post('/test-jwt', (req, res) => {
+    console.log('Test JWT endpoint called');
+    console.log('Content-Type:', req.headers['content-type']);
+    console.log('Body type:', typeof req.body);
+    console.log('Body:', req.body);
+    
+    try {
+        const token = req.body.keyValue || req.body.jwt || req.body;
+        
+        if (token) {
+            const tokenString = typeof token === 'string' ? token : token.toString();
+            const decoded = jwt.verify(tokenString, jwtSecret);
+            
+            res.json({
+                status: 'success',
+                message: 'JWT parsed and verified successfully',
+                decoded: decoded
+            });
+        } else {
+            res.json({
+                status: 'error',
+                message: 'No JWT token found',
+                body: req.body
+            });
+        }
+    } catch (error) {
+        res.json({
+            status: 'error',
+            message: 'JWT verification failed',
+            error: error.message,
+            body: req.body
+        });
+    }
 });
 
 // Test endpoint to verify static file serving
