@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+   <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Custom Activity Configuration</title>
+      <style>
+        body {
+            font-family: 'Salesforce Sans', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f6fe;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        input, textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        .btn {
+            background-color: #0176d3;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn:hover {
+            background-color: #0056b3;
+        }
+        .description {
+            color: #666;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+    </style>
+   </head>
+   <body>
+      <div class="container">
+         <h2>Custom Activity Configuration</h2>
+         <p>Configure your custom activity settings below:</p>
+
+         <form id="configForm">
+            <div class="form-group">
+               <label for="activityName">Activity Name:</label>
+               <input type="text" id="activityName" name="activityName"
+                  value="My Custom Activity" />
+               <div class="description">This name will appear in Journey
+                  Builder</div>
+            </div>
+
+            <div class="form-group">
+               <label for="customFlag">Custom Flag Value:</label>
+               <input type="text" id="customFlag" name="customFlag"
+                  value="PROCESSED_BY_CUSTOM_ACTIVITY" />
+               <div class="description">This flag will be set when contacts pass
+                  through this activity</div>
+            </div>
+
+            <div class="form-group">
+               <label for="customMessage">Custom Message:</label>
+               <textarea id="customMessage" name="customMessage"
+                  rows="3">Contact processed successfully by custom activity</textarea>
+               <div class="description">Additional message to log with the
+                  processing</div>
+            </div>
+
+            <div class="form-group">
+               <label for="logLevel">Logging Level:</label>
+               <select id="logLevel" name="logLevel">
+                  <option value="info">Info</option>
+                  <option value="debug">Debug</option>
+                  <option value="warn">Warning</option>
+               </select>
+            </div>
+         </form>
+      </div>
+
+      <!-- Postmonger for Marketing Cloud communication -->
+      <script
+         src="https://cdn.jsdelivr.net/npm/postmonger@1.0.1/postmonger.min.js"></script>
+      <script>
+        // Initialize Postmonger for iframe communication with Marketing Cloud
+        var connection = new Postmonger.Session();
+        var payload = {};
+        var currentActivityId = '';
+        var currentActivityName = '';
+
+        // Wait for Marketing Cloud to be ready
+        connection.on('initActivity', initialize);
+        connection.on('requestedTokens', onGetTokens);
+        connection.on('requestedEndpoints', onGetEndpoints);
+        connection.on('requestedInteraction', onRequestedInteraction);
+        connection.on('requestedTriggerEventDefinition', onRequestedTriggerEventDefinition);
+        connection.on('requestedDataSources', onRequestedDataSources);
+
+        // Tell Marketing Cloud we're ready
+        connection.trigger('ready');
+
+        function initialize(data) {
+            console.log('Initialize called with:', data);
+            if (data) {
+                payload = data;
+                currentActivityId = data.id;
+                currentActivityName = data.name;
+                
+                // If we have existing configuration, populate the form
+                if (data.arguments) {
+                    populateForm(data.arguments);
+                }
+            }
+            
+            // Set up form change listeners
+            setupFormListeners();
+            // Tell Journey Builder the config UI is ready for user interaction
+            connection.trigger('updateButton', { button: 'next', text: 'done', visible: true });
+        }
+
+        function onGetTokens(tokens) {
+            console.log('Tokens received:', tokens);
+        }
+
+        function onGetEndpoints(endpoints) {
+            console.log('Endpoints received:', endpoints);
+        }
+
+        function onRequestedInteraction(settings) {
+            console.log('Interaction settings:', settings);
+        }
+
+        function onRequestedTriggerEventDefinition(eventDefinition) {
+            console.log('Trigger event definition:', eventDefinition);
+        }
+
+        function onRequestedDataSources(dataSources) {
+            console.log('Data sources:', dataSources);
+        }
+
+        function populateForm(config) {
+            if (config.activityName) {
+                document.getElementById('activityName').value = config.activityName;
+            }
+            if (config.customFlag) {
+                document.getElementById('customFlag').value = config.customFlag;
+            }
+            if (config.customMessage) {
+                document.getElementById('customMessage').value = config.customMessage;
+            }
+            if (config.logLevel) {
+                document.getElementById('logLevel').value = config.logLevel;
+            }
+        }
+
+        function setupFormListeners() {
+            // Listen for form changes and save configuration
+            const form = document.getElementById('configForm');
+            const inputs = form.querySelectorAll('input, textarea, select');
+            
+            inputs.forEach(input => {
+                input.addEventListener('change', saveConfiguration);
+                input.addEventListener('blur', saveConfiguration);
+            });
+        }
+
+        function saveConfiguration() {
+            // Get all form values
+            const config = {
+                activityName: document.getElementById('activityName').value,
+                customFlag: document.getElementById('customFlag').value,
+                customMessage: document.getElementById('customMessage').value,
+                logLevel: document.getElementById('logLevel').value,
+                timestamp: new Date().toISOString()
+            };
+
+            console.log('Saving configuration:', config);
+
+            // Update the activity configuration
+            payload.name = config.activityName;
+            payload.arguments = {
+                execute: {
+                    inArguments: [
+                        {
+                            customFlag: config.customFlag,
+                            customMessage: config.customMessage,
+                            logLevel: config.logLevel,
+                            activityId: currentActivityId
+                        }
+                    ],
+                    outArguments: []
+                }
+            };
+
+            // Set the activity metadata
+            payload.metaData = {
+                icon: 'https://raw.githubusercontent.com/mallowigi/a-file-icon-vscode/master/logo.png?sanitize=true',
+                category: 'message'
+            };
+
+            // Tell Marketing Cloud to update the configuration
+            connection.trigger('updateActivity', payload);
+        }
+
+        // Handle Marketing Cloud requesting activity validation
+        connection.on('requestedActivityValidation', function(data) {
+            console.log('Activity validation requested');
+            // Perform validation logic here
+            const isValid = validateConfiguration();
+            
+            connection.trigger('activityValidationResult', {
+                valid: isValid,
+                errors: isValid ? [] : ['Configuration is invalid']
+            });
+        });
+
+        function validateConfiguration() {
+            const activityName = document.getElementById('activityName').value.trim();
+            const customFlag = document.getElementById('customFlag').value.trim();
+            
+            // Basic validation
+            if (!activityName || !customFlag) {
+                alert('Please fill in all required fields');
+                return false;
+            }
+            
+            return true;
+        }
+
+        // Auto-save configuration when the page loads
+        setTimeout(() => {
+            saveConfiguration();
+        }, 1000);
+    </script>
+   </body>
+</html>

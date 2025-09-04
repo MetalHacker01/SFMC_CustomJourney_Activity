@@ -1,0 +1,97 @@
+{
+  "workflowApiVersion": "1.1",
+  "metaData": {
+  "icon": "https://raw.githubusercontent.com/mallowigi/a-file-icon-vscode/master/logo.png?sanitize=true",
+    "category": "message",
+    "displayName": "Custom Flag Activity",
+    "description": "A simple custom activity that adds flags and logs contact processing"
+  },
+  "type": "REST",
+  "lang": {
+    "en-US": {
+      "name": "Custom Flag Activity",
+      "description": "Adds custom flags and processes contacts in Journey Builder"
+    }
+  },
+  "arguments": {
+    "execute": {
+      "inArguments": [
+        {
+          "contactKey": "{{Contact.Key}}",
+          "emailAddress": "{{InteractionDefaults.Email}}",
+          "firstName": "{{Contact.Attribute.Demographics.FirstName}}",
+          "lastName": "{{Contact.Attribute.Demographics.LastName}}"
+        }
+      ],
+      "outArguments": [],
+  "url": "https://nc1mkfbz-3000.euw.devtunnels.ms/execute",
+      "verb": "POST",
+      "body": "",
+      "format": "json",
+      "useJwt": true,
+      "timeout": 10000
+    }
+  },
+  "configurationArguments": {
+  "applicationExtensionKey": "a21d9560-1a53-40dc-b70e-df88851a07fb",
+    "save": {
+  "url": "https://nc1mkfbz-3000.euw.devtunnels.ms/save",
+      "verb": "POST",
+      "useJwt": true
+    },
+    "publish": {
+  "url": "https://nc1mkfbz-3000.euw.devtunnels.ms/publish", 
+      "verb": "POST",
+      "useJwt": true
+    },
+    "validate": {
+  "url": "https://nc1mkfbz-3000.euw.devtunnels.ms/validate",
+      "verb": "POST",
+      "useJwt": true
+    },
+    "stop": {
+  "url": "https://nc1mkfbz-3000.euw.devtunnels.ms/stop",
+      "verb": "POST", 
+      "useJwt": true
+    }
+  },
+  "wizardSteps": [
+    {
+      "label": "Configure Activity",
+      "key": "step1"
+    }
+  ],
+  "userInterfaces": {
+    "configModal": {
+      "height": 600,
+      "width": 800,
+      "fullscreen": false
+    }
+  },
+  "schema": {
+    "arguments": {
+      "execute": {
+        "inArguments": [
+          {
+            "customFlag": {
+              "dataType": "Text",
+              "isNullable": false,
+              "direction": "in"
+            },
+            "customMessage": {
+              "dataType": "Text", 
+              "isNullable": true,
+              "direction": "in"
+            },
+            "logLevel": {
+              "dataType": "Text",
+              "isNullable": true,
+              "direction": "in"
+            }
+          }
+        ],
+        "outArguments": []
+      }
+    }
+  }
+}
