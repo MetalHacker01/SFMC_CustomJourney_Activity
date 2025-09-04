@@ -1,254 +1,203 @@
 <!DOCTYPE html>
 <html lang="en">
    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Custom Activity Configuration</title>
+      <meta charset="utf-8">
+      <title>Custom Journey Activity Configuration</title>
+      <meta name="viewport"
+         content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+      <link rel="stylesheet" type="text/css"
+         href="/assets/styles/salesforce-lightning-design-system.css">
+      <link rel="stylesheet" type="text/css" href="styles.css">
       <style>
         body {
-            font-family: 'Salesforce Sans', Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f4f6fe;
+            background-color: #fafaf9;
+            font-family: "Salesforce Sans", Arial, sans-serif;
         }
+        
         .container {
+            padding: 20px;
             max-width: 600px;
             margin: 0 auto;
+        }
+        
+        .config-section {
             background: white;
             padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .form-group {
+            border-radius: 6px;
             margin-bottom: 20px;
+            box-shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.1);
         }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
         label {
             display: block;
             margin-bottom: 5px;
             font-weight: bold;
-            color: #333;
+            color: #3e3e3c;
         }
+        
         input, textarea, select {
             width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
+            padding: 8px 12px;
+            border: 1px solid #d8dde6;
             border-radius: 4px;
             font-size: 14px;
-            box-sizing: border-box;
         }
+        
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #1589ee;
+            box-shadow: 0 0 0 1px #1589ee;
+        }
+        
         .btn {
             background-color: #0176d3;
             color: white;
-            padding: 10px 20px;
             border: none;
+            padding: 10px 20px;
             border-radius: 4px;
             cursor: pointer;
             font-size: 14px;
         }
+        
         .btn:hover {
-            background-color: #0056b3;
+            background-color: #014486;
         }
-        .description {
-            color: #666;
-            font-size: 12px;
-            margin-top: 5px;
+        
+        .btn:disabled {
+            background-color: #c9c7c5;
+            cursor: not-allowed;
         }
     </style>
    </head>
    <body>
       <div class="container">
-         <h2>Custom Activity Configuration</h2>
-         <p>Configure your custom activity settings below:</p>
+         <div class="config-section">
+            <h2>Custom Activity Configuration</h2>
+            <p>Configure your custom journey activity settings below.</p>
 
-         <form id="configForm">
             <div class="form-group">
-               <label for="activityName">Activity Name:</label>
-               <input type="text" id="activityName" name="activityName"
-                  value="My Custom Activity" />
-               <div class="description">This name will appear in Journey
-                  Builder</div>
+               <label for="activity-name">Activity Name:</label>
+               <input type="text" id="activity-name"
+                  placeholder="Enter activity name" value="My Custom Activity">
             </div>
 
             <div class="form-group">
-               <label for="customFlag">Custom Flag Value:</label>
-               <input type="text" id="customFlag" name="customFlag"
-                  value="PROCESSED_BY_CUSTOM_ACTIVITY" />
-               <div class="description">This flag will be set when contacts pass
-                  through this activity</div>
+               <label for="message-text">Message:</label>
+               <textarea id="message-text" rows="3"
+                  placeholder="Enter your custom message">Hello from custom activity!</textarea>
             </div>
 
             <div class="form-group">
-               <label for="customMessage">Custom Message:</label>
-               <textarea id="customMessage" name="customMessage"
-                  rows="3">Contact processed successfully by custom activity</textarea>
-               <div class="description">Additional message to log with the
-                  processing</div>
+               <label for="execution-timeout">Execution Timeout (ms):</label>
+               <input type="number" id="execution-timeout" value="60000"
+                  min="1000" max="100000">
             </div>
 
             <div class="form-group">
-               <label for="logLevel">Logging Level:</label>
-               <select id="logLevel" name="logLevel">
-                  <option value="info">Info</option>
-                  <option value="debug">Debug</option>
-                  <option value="warn">Warning</option>
+               <label for="retry-count">Retry Count:</label>
+               <select id="retry-count">
+                  <option value="0">0</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
                </select>
             </div>
-         </form>
+         </div>
+
+         <div class="config-section">
+            <button id="save-config" class="btn">Save Configuration</button>
+            <span id="status-message"
+               style="margin-left: 15px; color: #4bca81;"></span>
+         </div>
       </div>
 
-      <!-- Postmonger for Marketing Cloud communication -->
+      <!-- Postmonger for SFMC Communication -->
       <script
-         src="https://cdn.jsdelivr.net/npm/postmonger@1.0.1/postmonger.min.js"></script>
-      <script>
-        // Initialize Postmonger for iframe communication with Marketing Cloud
-        var connection = new Postmonger.Session();
-        var payload = {};
-        var currentActivityId = '';
-        var currentActivityName = '';
-
-        // Wait for Marketing Cloud to be ready
-        connection.on('initActivity', initialize);
-        connection.on('requestedTokens', onGetTokens);
-        connection.on('requestedEndpoints', onGetEndpoints);
-        connection.on('requestedInteraction', onRequestedInteraction);
-        connection.on('requestedTriggerEventDefinition', onRequestedTriggerEventDefinition);
-        connection.on('requestedDataSources', onRequestedDataSources);
-
-        // Tell Marketing Cloud we're ready
-        connection.trigger('ready');
-
-        function initialize(data) {
-            console.log('Initialize called with:', data);
-            if (data) {
-                payload = data;
-                currentActivityId = data.id;
-                currentActivityName = data.name;
+         src="https://cdn.jsdelivr.net/npm/postmonger@0.0.16/postmonger.min.js"></script>
+      <script>  
+      // Initialize Postmonger connection
+        const connection = new Postmonger.Session();
+        
+        let activityPayload = {};
+        
+        // Listen for initialization from Journey Builder
+        connection.on('initActivity', function(payload) {
+            console.log('Activity initialized:', payload);
+            activityPayload = payload;
+            
+            // Populate form with existing configuration
+            if (payload.configurationArguments) {
+                const config = payload.configurationArguments;
                 
-                // If we have existing configuration, populate the form
-                if (data.arguments) {
-                    populateForm(data.arguments);
+                if (config.activityName) {
+                    document.getElementById('activity-name').value = config.activityName;
+                }
+                if (config.messageText) {
+                    document.getElementById('message-text').value = config.messageText;
+                }
+                if (config.executionTimeout) {
+                    document.getElementById('execution-timeout').value = config.executionTimeout;
+                }
+                if (config.retryCount) {
+                    document.getElementById('retry-count').value = config.retryCount;
                 }
             }
             
-            // Set up form change listeners
-            setupFormListeners();
-            // Tell Journey Builder the config UI is ready for user interaction
-            connection.trigger('updateButton', { button: 'next', text: 'done', visible: true });
-        }
-
-        function onGetTokens(tokens) {
-            console.log('Tokens received:', tokens);
-        }
-
-        function onGetEndpoints(endpoints) {
-            console.log('Endpoints received:', endpoints);
-        }
-
-        function onRequestedInteraction(settings) {
-            console.log('Interaction settings:', settings);
-        }
-
-        function onRequestedTriggerEventDefinition(eventDefinition) {
-            console.log('Trigger event definition:', eventDefinition);
-        }
-
-        function onRequestedDataSources(dataSources) {
-            console.log('Data sources:', dataSources);
-        }
-
-        function populateForm(config) {
-            if (config.activityName) {
-                document.getElementById('activityName').value = config.activityName;
-            }
-            if (config.customFlag) {
-                document.getElementById('customFlag').value = config.customFlag;
-            }
-            if (config.customMessage) {
-                document.getElementById('customMessage').value = config.customMessage;
-            }
-            if (config.logLevel) {
-                document.getElementById('logLevel').value = config.logLevel;
-            }
-        }
-
-        function setupFormListeners() {
-            // Listen for form changes and save configuration
-            const form = document.getElementById('configForm');
-            const inputs = form.querySelectorAll('input, textarea, select');
-            
-            inputs.forEach(input => {
-                input.addEventListener('change', saveConfiguration);
-                input.addEventListener('blur', saveConfiguration);
-            });
-        }
-
-        function saveConfiguration() {
-            // Get all form values
+            // Enable save button
+            document.getElementById('save-config').disabled = false;
+        });
+        
+        // Handle save button click
+        document.getElementById('save-config').addEventListener('click', function() {
             const config = {
-                activityName: document.getElementById('activityName').value,
-                customFlag: document.getElementById('customFlag').value,
-                customMessage: document.getElementById('customMessage').value,
-                logLevel: document.getElementById('logLevel').value,
-                timestamp: new Date().toISOString()
+                activityName: document.getElementById('activity-name').value,
+                messageText: document.getElementById('message-text').value,
+                executionTimeout: parseInt(document.getElementById('execution-timeout').value),
+                retryCount: parseInt(document.getElementById('retry-count').value)
             };
-
-            console.log('Saving configuration:', config);
-
-            // Update the activity configuration
-            payload.name = config.activityName;
-            payload.arguments = {
-                execute: {
-                    inArguments: [
-                        {
-                            customFlag: config.customFlag,
-                            customMessage: config.customMessage,
-                            logLevel: config.logLevel,
-                            activityId: currentActivityId
-                        }
-                    ],
-                    outArguments: []
-                }
-            };
-
-            // Set the activity metadata
-            payload.metaData = {
-                icon: 'https://raw.githubusercontent.com/mallowigi/a-file-icon-vscode/master/logo.png?sanitize=true',
-                category: 'message'
-            };
-
-            // Tell Marketing Cloud to update the configuration
-            connection.trigger('updateActivity', payload);
-        }
-
-        // Handle Marketing Cloud requesting activity validation
-        connection.on('requestedActivityValidation', function(data) {
-            console.log('Activity validation requested');
-            // Perform validation logic here
-            const isValid = validateConfiguration();
             
-            connection.trigger('activityValidationResult', {
-                valid: isValid,
-                errors: isValid ? [] : ['Configuration is invalid']
+            // Update activity payload
+            activityPayload.configurationArguments = config;
+            activityPayload.name = config.activityName;
+            
+            // Define what data to pass to execute endpoint
+            activityPayload.arguments.execute.inArguments = [{
+                activityName: config.activityName,
+                messageText: config.messageText,
+                executionTimeout: config.executionTimeout,
+                retryCount: config.retryCount,
+                contactKey: "{{Contact.Key}}",
+                emailAddress: "{{Contact.Attribute.EmailAddress}}"
+            }];
+            
+            // Send configuration back to Journey Builder
+            connection.trigger('updateActivity', activityPayload);
+            
+            // Show success message
+            document.getElementById('status-message').textContent = 'Configuration saved!';
+            setTimeout(() => {
+                document.getElementById('status-message').textContent = '';
+            }, 3000);
+        });
+        
+        // Listen for form field changes to enable real-time validation
+        document.querySelectorAll('input, textarea, select').forEach(element => {
+            element.addEventListener('change', function() {
+                // You can add validation logic here
+                console.log('Configuration changed');
             });
         });
-
-        function validateConfiguration() {
-            const activityName = document.getElementById('activityName').value.trim();
-            const customFlag = document.getElementById('customFlag').value.trim();
-            
-            // Basic validation
-            if (!activityName || !customFlag) {
-                alert('Please fill in all required fields');
-                return false;
-            }
-            
-            return true;
-        }
-
-        // Auto-save configuration when the page loads
-        setTimeout(() => {
-            saveConfiguration();
-        }, 1000);
+        
+        // Initialize connection
+        connection.trigger('ready');
+        console.log('Custom Activity Config UI loaded');
     </script>
    </body>
 </html>
