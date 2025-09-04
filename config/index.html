@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+   <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Custom Activity Configuration</title>
+      <link rel="stylesheet" href="/public/style.css">
+   </head>
+   <body>
+      <div class="container">
+         <h2>Custom Activity Configuration</h2>
+         <p>Configure your custom activity settings below:</p>
+         <form id="configForm">
+            <div class="form-group">
+               <label for="activityName">Activity Name:</label>
+               <input type="text" id="activityName" name="activityName"
+                  value="My Custom Activity" />
+               <div class="description">This name will appear in Journey
+                  Builder</div>
+            </div>
+            <div class="form-group">
+               <label for="customFlag">Custom Flag Value:</label>
+               <input type="text" id="customFlag" name="customFlag"
+                  value="PROCESSED_BY_CUSTOM_ACTIVITY" />
+               <div class="description">This flag will be set when contacts pass
+                  through this activity</div>
+            </div>
+            <div class="form-group">
+               <label for="customMessage">Custom Message:</label>
+               <textarea id="customMessage" name="customMessage"
+                  rows="3">Contact processed successfully by custom activity</textarea>
+               <div class="description">Additional message to log with the
+                  processing</div>
+            </div>
+            <div class="form-group">
+               <label for="logLevel">Logging Level:</label>
+               <select id="logLevel" name="logLevel">
+                  <option value="info">Info</option>
+                  <option value="debug">Debug</option>
+                  <option value="warn">Warning</option>
+               </select>
+            </div>
+         </form>
+      </div>
+      <script
+         src="https://cdn.jsdelivr.net/npm/postmonger@1.0.1/postmonger.min.js"></script>
+      <script src="/public/config.js"></script>
+   </body>
+</html>
