@@ -1,11 +1,3 @@
-// Fallback route for /config.html
-app.get('/config.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'config.html'));
-});
-// Serve /config/index.html for SFMC iframe loader
-app.get('/config/index.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'config.html'));
-});
 const express = require('express');
 const bodyParser = require('body-parser');
 const path = require('path');
@@ -14,6 +6,15 @@ const cors = require('cors');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Fallback route for /config.html
+app.get('/config.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'config.html'));
+});
+// Serve /config/index.html for SFMC iframe loader
+app.get('/config/index.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'config.html'));
+});
 
 // Add detailed request logging
 app.use((req, res, next) => {
