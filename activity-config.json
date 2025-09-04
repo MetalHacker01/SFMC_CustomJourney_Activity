@@ -72,19 +72,19 @@
       "execute": {
         "inArguments": [
           {
-            "customFlag": {
+            "contactKey": {
               "dataType": "Text",
               "isNullable": false,
               "direction": "in"
             },
-            "customMessage": {
-              "dataType": "Text", 
+            "emailAddress": {
+              "dataType": "Email",
               "isNullable": true,
               "direction": "in"
             },
-            "logLevel": {
-              "dataType": "Text",
-              "isNullable": true,
+            "customMessage": {
+              "dataType": "Text", 
+              "isNullable": false,
               "direction": "in"
             }
           }

@@ -87,8 +87,20 @@ app.use((req, res, next) => {
 
 // Middleware
 app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json({ limit: '10mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
+
+// Error handling middleware for JSON parsing
+app.use((error, req, res, next) => {
+    if (error instanceof SyntaxError && error.status === 400 && 'body' in error) {
+        console.error('Bad JSON:', error.message);
+        return res.status(400).json({
+            status: 'error',
+            message: 'Invalid JSON in request body'
+        });
+    }
+    next();
+});
 
 // Serve static files - ORDER MATTERS!
 app.use(express.static('public'));
@@ -118,6 +130,27 @@ app.post('/save', (req, res) => {
     console.log('Request body:', JSON.stringify(req.body, null, 2));
     
     try {
+        // Validate JWT token if present
+        if (req.body.keyValue || req.body.jwt) {
+            try {
+                const token = req.body.keyValue || req.body.jwt;
+                const decoded = jwt.verify(token, jwtSecret);
+                console.log('JWT validated successfully for save');
+            } catch (jwtError) {
+                console.error('JWT validation failed in save:', jwtError.message);
+                return res.status(401).json({
+                    status: 'error',
+                    message: 'Invalid JWT token'
+                });
+            }
+        }
+        
+        // Extract and validate configuration data
+        const activityObjectID = req.body.activityObjectID;
+        const definitionInstanceId = req.body.definitionInstanceId;
+        
+        console.log('Save successful for activity:', activityObjectID);
+        
         // Here you can save the configuration to your database
         // For now, just acknowledge the save
         res.status(200).json({
@@ -127,9 +160,9 @@ app.post('/save', (req, res) => {
         
     } catch (error) {
         console.error('Error in save endpoint:', error);
-        res.status(400).json({
+        res.status(500).json({
             status: 'error',
-            message: error.message
+            message: 'Internal server error during save'
         });
     }
 });
@@ -140,9 +173,28 @@ app.post('/execute', async (req, res) => {
     console.log('Request body:', JSON.stringify(req.body, null, 2));
     
     try {
-        // Decode the JWT token to get contact and journey data
+        // Validate that we have a JWT token
         const token = req.body.keyValue || req.body.jwt;
-        const decoded = jwt.verify(token, jwtSecret);
+        if (!token) {
+            console.error('No JWT token provided in execute request');
+            return res.status(400).json({
+                status: 'error',
+                message: 'No JWT token provided'
+            });
+        }
+        
+        // Decode the JWT token to get contact and journey data
+        let decoded;
+        try {
+            decoded = jwt.verify(token, jwtSecret);
+            console.log('JWT decoded successfully in execute');
+        } catch (jwtError) {
+            console.error('JWT validation failed in execute:', jwtError.message);
+            return res.status(401).json({
+                status: 'error',
+                message: 'Invalid JWT token'
+            });
+        }
         
         console.log('Decoded JWT:', decoded);
         
@@ -234,29 +286,53 @@ app.post('/publish', (req, res) => {
     console.log('Request body:', JSON.stringify(req.body, null, 2));
     
     try {
-        // Validate configuration
-        const config = req.body.configuration;
+        // Validate JWT token if present
+        if (req.body.keyValue || req.body.jwt) {
+            try {
+                const token = req.body.keyValue || req.body.jwt;
+                const decoded = jwt.verify(token, jwtSecret);
+                console.log('JWT validated successfully for publish');
+            } catch (jwtError) {
+                console.error('JWT validation failed in publish:', jwtError.message);
+                return res.status(401).json({
+                    status: 'error',
+                    message: 'Invalid JWT token'
+                });
+            }
+        }
         
-        // Perform any validation logic here
-        if (!config || !config.arguments) {
+        // Validate the activity configuration
+        const activityObjectID = req.body.activityObjectID;
+        const definitionInstanceId = req.body.definitionInstanceId;
+        const requestObjectId = req.body.requestObjectId;
+        
+        console.log('Publish validation details:', {
+            activityObjectID,
+            definitionInstanceId,
+            requestObjectId
+        });
+        
+        // Basic validation - ensure we have required IDs
+        if (!activityObjectID) {
             return res.status(400).json({
                 status: 'error',
-                message: 'Invalid configuration'
+                message: 'Missing activityObjectID'
             });
         }
         
-        console.log('Configuration validated successfully');
+        console.log('Publish validation successful');
         
+        // Return success response
         res.status(200).json({
             status: 'success',
-            message: 'Configuration is valid'
+            message: 'Activity published successfully'
         });
         
     } catch (error) {
         console.error('Error in publish endpoint:', error);
-        res.status(400).json({
+        res.status(500).json({
             status: 'error',
-            message: error.message
+            message: 'Internal server error during publish'
         });
     }
 });
@@ -264,11 +340,41 @@ app.post('/publish', (req, res) => {
 // Validate endpoint - called during configuration
 app.post('/validate', (req, res) => {
     console.log('Validate endpoint called');
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
     
-    res.status(200).json({
-        status: 'success',
-        message: 'Validation successful'
-    });
+    try {
+        // Validate JWT token if present
+        if (req.body.keyValue || req.body.jwt) {
+            try {
+                const token = req.body.keyValue || req.body.jwt;
+                const decoded = jwt.verify(token, jwtSecret);
+                console.log('JWT validated successfully for validate');
+            } catch (jwtError) {
+                console.error('JWT validation failed in validate:', jwtError.message);
+                return res.status(401).json({
+                    status: 'error',
+                    message: 'Invalid JWT token'
+                });
+            }
+        }
+        
+        // Perform validation logic
+        const activityObjectID = req.body.activityObjectID;
+        
+        console.log('Validation successful for activity:', activityObjectID);
+        
+        res.status(200).json({
+            status: 'success',
+            message: 'Validation successful'
+        });
+        
+    } catch (error) {
+        console.error('Error in validate endpoint:', error);
+        res.status(500).json({
+            status: 'error',
+            message: 'Internal server error during validation'
+        });
+    }
 });
 
 // Stop endpoint - called when contact exits
@@ -350,6 +456,37 @@ app.get('/test-sfmc', async (req, res) => {
             error: error.message
         });
     }
+});
+
+// Test endpoint for Journey Builder validation
+app.get('/test-endpoints', (req, res) => {
+    res.json({
+        status: 'success',
+        message: 'All endpoints are accessible',
+        endpoints: {
+            save: 'POST /save',
+            execute: 'POST /execute', 
+            publish: 'POST /publish',
+            validate: 'POST /validate',
+            stop: 'POST /stop'
+        },
+        configuration: {
+            jwtSecretConfigured: !!jwtSecret,
+            appExtensionKeyConfigured: !!appExtensionKey,
+            serverRunning: true
+        }
+    });
+});
+
+// Catch-all error handler for undefined routes
+app.use('*', (req, res) => {
+    console.log(`404 - Route not found: ${req.method} ${req.originalUrl}`);
+    res.status(404).json({
+        status: 'error',
+        message: 'Route not found',
+        method: req.method,
+        url: req.originalUrl
+    });
 });
 
 app.listen(PORT, () => {
