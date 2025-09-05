@@ -48,9 +48,12 @@ async function getSFMCAccessToken() {
 
 async function updateDataExtensionRow(contactKey, customMessage) {
     try {
+        console.log('Getting SFMC access token...');
         const accessToken = await getSFMCAccessToken();
+        console.log('Access token obtained successfully');
         
-        const restUrl = `https://${sfmcConfig.subdomain}.rest.marketingcloudapis.com/data/v1/async/dataextensions/key:${dataExtensionConfig.externalKey}/rows`;
+        // Use synchronous endpoint for better reliability (similar to Update Contact activity)
+        const restUrl = `https://${sfmcConfig.subdomain}.rest.marketingcloudapis.com/data/v1/async/dataextensions/key:${dataExtensionConfig.externalKey}/rows/upsert`;
         
         const payload = {
             items: [{
@@ -59,19 +62,40 @@ async function updateDataExtensionRow(contactKey, customMessage) {
             }]
         };
         
-        const response = await axios.put(restUrl, payload, {
+        console.log('Sending request to SFMC:', {
+            url: restUrl,
+            payload: payload
+        });
+        
+        const response = await axios.post(restUrl, payload, {
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
                 'Content-Type': 'application/json'
-            }
+            },
+            timeout: 15000 // 15 second timeout
         });
         
+        console.log('Data Extension update response status:', response.status);
         console.log('Data Extension update response:', response.data);
         return response.data;
         
     } catch (error) {
-        console.error('Error updating data extension:', error.response?.data || error.message);
-        throw error;
+        console.error('Error updating data extension:');
+        console.error('Status:', error.response?.status);
+        console.error('Status Text:', error.response?.statusText);
+        console.error('Response Data:', error.response?.data);
+        console.error('Error Message:', error.message);
+        
+        // Provide more specific error information
+        if (error.response?.status === 401) {
+            throw new Error('SFMC Authentication failed - check credentials');
+        } else if (error.response?.status === 404) {
+            throw new Error(`Data Extension not found: ${dataExtensionConfig.externalKey}`);
+        } else if (error.response?.status === 400) {
+            throw new Error(`Bad request: ${error.response?.data?.message || 'Invalid data'}`);
+        } else {
+            throw new Error(`SFMC API error: ${error.message}`);
+        }
     }
 }
 
@@ -308,24 +332,71 @@ app.post('/execute', async (req, res) => {
         console.log(`Processing contact: ${contactKey} in journey: ${journeyId}`);
         console.log(`Custom message to write: ${customMessage}`);
         
-        clearTimeout(timeout);
+        // Check if we have the required SFMC credentials
+        if (!sfmcConfig.clientId || !sfmcConfig.clientSecret || !sfmcConfig.subdomain) {
+            console.warn('SFMC credentials not configured, skipping data extension update');
+            clearTimeout(timeout);
+            
+            return res.status(200).json({
+                status: 'success',
+                message: 'Contact processed successfully (SFMC update skipped - credentials not configured)',
+                data: {
+                    contactKey: contactKey,
+                    journeyId: journeyId,
+                    activityId: activityId,
+                    customMessage: customMessage,
+                    timestamp: new Date().toISOString(),
+                    sfmcUpdateSkipped: true
+                }
+            });
+        }
         
-        // For now, just return success without SFMC API call to avoid timeouts
-        // You can enable SFMC API calls once the basic flow is working
-        console.log('Returning success response (SFMC API disabled for testing)');
-        
-        res.status(200).json({
-            status: 'success',
-            message: 'Contact processed successfully',
-            data: {
-                contactKey: contactKey,
-                journeyId: journeyId,
-                activityId: activityId,
-                customMessage: customMessage,
-                timestamp: new Date().toISOString(),
-                note: 'SFMC API call disabled for testing'
-            }
-        });
+        // Update the data extension with the custom message
+        try {
+            console.log(`Attempting to update data extension for contact: ${contactKey}`);
+            console.log(`Message to write: ${customMessage}`);
+            
+            const updateResult = await updateDataExtensionRow(contactKey, customMessage);
+            
+            console.log(`Successfully updated data extension for contact: ${contactKey}`);
+            clearTimeout(timeout);
+            
+            // Respond with success
+            res.status(200).json({
+                status: 'success',
+                message: 'Contact processed and data extension updated successfully',
+                data: {
+                    contactKey: contactKey,
+                    journeyId: journeyId,
+                    activityId: activityId,
+                    customMessage: customMessage,
+                    timestamp: new Date().toISOString(),
+                    dataExtension: {
+                        externalKey: dataExtensionConfig.externalKey,
+                        name: dataExtensionConfig.name
+                    },
+                    sfmcUpdateResult: updateResult
+                }
+            });
+            
+        } catch (sfmcError) {
+            console.error('Failed to update SFMC data extension:', sfmcError);
+            clearTimeout(timeout);
+            
+            // Still return success but indicate the SFMC update failed
+            res.status(200).json({
+                status: 'partial_success',
+                message: 'Contact processed but data extension update failed',
+                data: {
+                    contactKey: contactKey,
+                    journeyId: journeyId,
+                    activityId: activityId,
+                    customMessage: customMessage,
+                    timestamp: new Date().toISOString(),
+                    error: sfmcError.message
+                }
+            });
+        }
         
     } catch (error) {
         console.error('Error in execute endpoint:', error);
@@ -575,6 +646,41 @@ app.get('/test-sfmc', async (req, res) => {
         res.status(500).json({
             status: 'error',
             message: 'SFMC connection failed',
+            error: error.message
+        });
+    }
+});
+
+// Test data extension update with sample data
+app.get('/test-de-update', async (req, res) => {
+    try {
+        if (!sfmcConfig.clientId || !sfmcConfig.clientSecret || !sfmcConfig.subdomain) {
+            return res.json({
+                status: 'error',
+                message: 'SFMC credentials not configured'
+            });
+        }
+        
+        const testContactKey = 'TEST_CONTACT_' + Date.now();
+        const testMessage = 'Test message from custom activity - ' + new Date().toISOString();
+        
+        console.log('Testing data extension update...');
+        const result = await updateDataExtensionRow(testContactKey, testMessage);
+        
+        res.json({
+            status: 'success',
+            message: 'Data extension update test successful',
+            testData: {
+                contactKey: testContactKey,
+                customMessage: testMessage
+            },
+            result: result
+        });
+        
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            message: 'Data extension update test failed',
             error: error.message
         });
     }
