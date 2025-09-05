@@ -13,15 +13,23 @@ const PORT = process.env.PORT || 3000;
 const jwtSecret = process.env.JWT_SECRET;
 const appExtensionKey = process.env.APP_EXTENSION_KEY;
 
-// SFMC API Configuration
+// SFMC API Configuration with hardcoded URLs to fix DNS issue
 const sfmcConfig = {
     clientId: process.env.SFMC_CLIENT_ID,
     clientSecret: process.env.SFMC_CLIENT_SECRET,
     subdomain: process.env.SFMC_SUBDOMAIN,
     accountId: process.env.SFMC_ACCOUNT_ID,
-    authUrl: process.env.SFMC_AUTH_URL || `https://${process.env.SFMC_SUBDOMAIN}.auth.marketingcloudapis.com/v2/token`,
-    restBaseUrl: process.env.SFMC_REST_BASE_URL || `https://${process.env.SFMC_SUBDOMAIN}.rest.marketingcloudapis.com`
+    // Hardcode the correct URLs with -3m4 suffix to fix the DNS issue
+    authUrl: process.env.SFMC_AUTH_URL || 'https://mcpymzz7w7nbc2rxvym6ydvl-3m4.auth.marketingcloudapis.com/v2/token',
+    restBaseUrl: process.env.SFMC_REST_BASE_URL || 'https://mcpymzz7w7nbc2rxvym6ydvl-3m4.rest.marketingcloudapis.com'
 };
+
+// Debug configuration on startup
+console.log('SFMC Configuration loaded:');
+console.log('- Client ID:', sfmcConfig.clientId?.substring(0, 8) + '...');
+console.log('- Subdomain from env:', process.env.SFMC_SUBDOMAIN);
+console.log('- Auth URL:', sfmcConfig.authUrl);
+console.log('- REST Base URL:', sfmcConfig.restBaseUrl);
 
 // Data Extension Configuration
 const dataExtensionConfig = {
@@ -523,13 +531,19 @@ app.get('/debug-env', (req, res) => {
     res.json({
         status: 'debug',
         message: 'Environment variables check',
-        sfmcConfig: {
-            clientId: sfmcConfig.clientId ? sfmcConfig.clientId.substring(0, 8) + '...' : 'NOT_SET',
-            clientSecret: sfmcConfig.clientSecret ? '***SET***' : 'NOT_SET',
-            subdomain: sfmcConfig.subdomain || 'NOT_SET',
-            accountId: sfmcConfig.accountId || 'NOT_SET'
+        environmentVariables: {
+            SFMC_CLIENT_ID: process.env.SFMC_CLIENT_ID ? process.env.SFMC_CLIENT_ID.substring(0, 8) + '...' : 'NOT_SET',
+            SFMC_CLIENT_SECRET: process.env.SFMC_CLIENT_SECRET ? '***SET***' : 'NOT_SET',
+            SFMC_SUBDOMAIN: process.env.SFMC_SUBDOMAIN || 'NOT_SET',
+            SFMC_ACCOUNT_ID: process.env.SFMC_ACCOUNT_ID || 'NOT_SET',
+            SFMC_AUTH_URL: process.env.SFMC_AUTH_URL || 'NOT_SET',
+            SFMC_REST_BASE_URL: process.env.SFMC_REST_BASE_URL || 'NOT_SET'
         },
-        authUrl: `https://${sfmcConfig.subdomain}.auth.marketingcloudapis.com/v2/token`,
+        actualConfig: {
+            authUrl: sfmcConfig.authUrl,
+            restBaseUrl: sfmcConfig.restBaseUrl,
+            subdomain: sfmcConfig.subdomain
+        },
         expectedSubdomain: 'mcpymzz7w7nbc2rxvym6ydvl-3m4'
     });
 });
