@@ -173,6 +173,7 @@
             // Set the arguments that will be passed to the execute endpoint (like the example)
             activityPayload.arguments.execute.inArguments = [{
                 contactKey: "{{Contact.Key}}",
+                subscriberKey: "{{Contact.Key}}", // SFMC uses SubscriberKey in data extensions
                 emailAddress: "{{InteractionDefaults.Email}}",
                 customMessage: customMessage,
                 uuid: uuid,

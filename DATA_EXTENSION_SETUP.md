@@ -11,7 +11,7 @@ This is your main data extension where the custom message will be written.
 **Name:** `Master_Subscriber`
 
 **Required Fields:**
-- `ContactKey` (Text, Primary Key, Required)
+- `SubscriberKey` (Text, Primary Key, Required)
 - `CustomText` (Text, 500 characters) - This field will be updated by the activity
 
 ### 2. Activity Execution Log Data Extension (Optional but Recommended)
@@ -21,7 +21,7 @@ This data extension logs all activity executions for monitoring and debugging, s
 **Name:** `Custom_Activity_Execution_Log`
 
 **Required Fields:**
-- `ContactKey` (Text, Required)
+- `SubscriberKey` (Text, Required) - The contact's subscriber key
 - `ActivityUUID` (Text, Required) - Unique identifier for each activity execution
 - `ExecutionDate` (Date, Required) - When the activity was executed
 - `Status` (Text, Required) - Success/Error status
@@ -49,7 +49,7 @@ If you need to create the log data extension, use this SQL in SFMC:
 ```sql
 -- Create the activity log data extension
 CREATE TABLE Custom_Activity_Execution_Log (
-    ContactKey VARCHAR(255) NOT NULL,
+    SubscriberKey VARCHAR(255) NOT NULL,
     ActivityUUID VARCHAR(50) NOT NULL,
     ExecutionDate DATETIME NOT NULL,
     Status VARCHAR(50) NOT NULL,
@@ -64,7 +64,7 @@ CREATE TABLE Custom_Activity_Execution_Log (
 2. **Execution Phase:** When a contact enters the activity:
    - The custom message is written to the `CustomText` field in the main data extension
    - Execution details are logged to the activity log data extension (if configured)
-   - Both operations use the contact's `ContactKey` as the identifier
+   - Both operations use the contact's `SubscriberKey` as the identifier
 
 ## Monitoring Activity Executions
 

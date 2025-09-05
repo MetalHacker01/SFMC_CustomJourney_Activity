@@ -18,7 +18,9 @@ const sfmcConfig = {
     clientId: process.env.SFMC_CLIENT_ID,
     clientSecret: process.env.SFMC_CLIENT_SECRET,
     subdomain: process.env.SFMC_SUBDOMAIN,
-    accountId: process.env.SFMC_ACCOUNT_ID
+    accountId: process.env.SFMC_ACCOUNT_ID,
+    authUrl: process.env.SFMC_AUTH_URL || `https://${process.env.SFMC_SUBDOMAIN}.auth.marketingcloudapis.com/v2/token`,
+    restBaseUrl: process.env.SFMC_REST_BASE_URL || `https://${process.env.SFMC_SUBDOMAIN}.rest.marketingcloudapis.com`
 };
 
 // Data Extension Configuration
@@ -33,12 +35,14 @@ const activityLogConfig = {
     name: process.env.ACTIVITY_LOG_DE_NAME || 'Custom_Activity_Execution_Log'
 };
 
-// SFMC API Helper Functions - simplified like the example
+// SFMC API Helper Functions - following the example pattern
 async function getSFMCAccessToken() {
-    const tokenURL = `https://${sfmcConfig.subdomain}.auth.marketingcloudapis.com/v2/token`;
+    console.log('SFMC Token Request Details:');
+    console.log('- Auth URL:', sfmcConfig.authUrl);
+    console.log('- Client ID:', sfmcConfig.clientId?.substring(0, 8) + '...');
     
     try {
-        const response = await axios.post(tokenURL, {
+        const response = await axios.post(sfmcConfig.authUrl, {
             grant_type: 'client_credentials',
             client_id: sfmcConfig.clientId,
             client_secret: sfmcConfig.clientSecret,
@@ -50,7 +54,10 @@ async function getSFMCAccessToken() {
             rest_instance_url: response.data.rest_instance_url
         };
     } catch (error) {
-        console.error('Error retrieving SFMC token:', error.response?.data || error.message);
+        console.error('SFMC Token Error Details:');
+        console.error('- URL attempted:', sfmcConfig.authUrl);
+        console.error('- Error:', error.message);
+        console.error('- Response:', error.response?.data);
         throw error;
     }
 }
@@ -59,12 +66,12 @@ async function getSFMCAccessToken() {
 async function saveActivityExecution(data) {
     try {
         const authResult = await getSFMCAccessToken();
-        const restBaseUrl = authResult.rest_instance_url || `https://${sfmcConfig.subdomain}.rest.marketingcloudapis.com`;
+        const restBaseUrl = authResult.rest_instance_url || sfmcConfig.restBaseUrl;
         const restUrl = `${restBaseUrl}/data/v1/async/dataextensions/key:${activityLogConfig.externalKey}/rows`;
         
         const payload = {
             items: [{
-                ContactKey: data.contactKey,
+                SubscriberKey: data.contactKey,
                 ActivityUUID: data.uuid,
                 ExecutionDate: data.executionDate.toISOString(),
                 Status: data.status,
@@ -97,14 +104,14 @@ async function updateDataExtensionRow(contactKey, customMessage) {
         const authResult = await getSFMCAccessToken();
         console.log('Access token obtained successfully');
         
-        // Use the REST instance URL from the auth response
-        const restBaseUrl = authResult.rest_instance_url || `https://${sfmcConfig.subdomain}.rest.marketingcloudapis.com`;
+        // Use the REST instance URL from the auth response or fallback to configured URL
+        const restBaseUrl = authResult.rest_instance_url || sfmcConfig.restBaseUrl;
         const restUrl = `${restBaseUrl}/data/v1/async/dataextensions/key:${dataExtensionConfig.externalKey}/rows`;
         
-        // Use the correct payload structure for SFMC REST API
+        // Use the correct payload structure for SFMC REST API with SubscriberKey
         const payload = {
             items: [{
-                ContactKey: contactKey,
+                SubscriberKey: contactKey,
                 CustomText: customMessage
             }]
         };
@@ -145,10 +152,10 @@ async function updateDataExtensionRow(contactKey, customMessage) {
                 const alternativePayload = {
                     items: [{
                         keys: {
-                            ContactKey: contactKey
+                            SubscriberKey: contactKey
                         },
                         values: {
-                            ContactKey: contactKey,
+                            SubscriberKey: contactKey,
                             CustomText: customMessage
                         }
                     }]
@@ -336,10 +343,12 @@ app.post('/execute', async (req, res) => {
             const tokenString = typeof token === 'string' ? token : token.toString();
             const decoded = jwt.verify(tokenString, jwtSecret);
             
-            // Extract contact data
+            // Extract contact data - try both contactKey and subscriberKey
             const contactKey = decoded.request?.contactKey || 
                               decoded.inArguments?.[0]?.contactKey || 
+                              decoded.inArguments?.[0]?.subscriberKey ||
                               decoded.contactKey || 
+                              decoded.subscriberKey ||
                               'UNKNOWN_CONTACT';
                               
             const inArguments = decoded.request?.currentActivity?.arguments?.execute?.inArguments || 
@@ -597,7 +606,17 @@ app.get('/test', (req, res) => {
 // Test SFMC connectivity
 app.get('/test-sfmc', async (req, res) => {
     try {
-        if (!sfmcConfig.clientId || !sfmcConfig.clientSecret || !sfmcConfig.subdomain) {
+        console.log('Testing SFMC connection...');
+        console.log('Configuration check:', {
+            clientId: !!sfmcConfig.clientId,
+            clientSecret: !!sfmcConfig.clientSecret,
+            subdomain: !!sfmcConfig.subdomain,
+            accountId: !!sfmcConfig.accountId,
+            authUrl: sfmcConfig.authUrl,
+            restBaseUrl: sfmcConfig.restBaseUrl
+        });
+        
+        if (!sfmcConfig.clientId || !sfmcConfig.clientSecret) {
             return res.json({
                 status: 'error',
                 message: 'SFMC credentials not configured',
@@ -605,7 +624,9 @@ app.get('/test-sfmc', async (req, res) => {
                     clientId: !!sfmcConfig.clientId,
                     clientSecret: !!sfmcConfig.clientSecret,
                     subdomain: !!sfmcConfig.subdomain,
-                    accountId: !!sfmcConfig.accountId
+                    accountId: !!sfmcConfig.accountId,
+                    authUrl: sfmcConfig.authUrl,
+                    restBaseUrl: sfmcConfig.restBaseUrl
                 }
             });
         }
@@ -622,6 +643,10 @@ app.get('/test-sfmc', async (req, res) => {
             dataExtension: {
                 name: dataExtensionConfig.name,
                 externalKey: dataExtensionConfig.externalKey
+            },
+            configuration: {
+                authUrl: sfmcConfig.authUrl,
+                restBaseUrl: sfmcConfig.restBaseUrl
             }
         });
         
@@ -629,7 +654,11 @@ app.get('/test-sfmc', async (req, res) => {
         res.status(500).json({
             status: 'error',
             message: 'SFMC connection failed',
-            error: error.message
+            error: error.message,
+            configuration: {
+                authUrl: sfmcConfig.authUrl,
+                restBaseUrl: sfmcConfig.restBaseUrl
+            }
         });
     }
 });
