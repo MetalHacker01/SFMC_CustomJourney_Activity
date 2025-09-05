@@ -374,15 +374,38 @@ app.post('/execute', async (req, res) => {
         }
         
         console.log('JWT decoded successfully, extracting data...');
+        console.log('Full decoded JWT structure:', JSON.stringify(decoded, null, 2));
         
-        // Extract contact data from the JWT
-        const contactKey = decoded.request?.contactKey || 'unknown';
-        const journeyId = decoded.request?.currentActivity?.journey?.id || 'unknown';
-        const activityId = decoded.request?.currentActivity?.id || 'unknown';
+        // Extract contact data from the JWT - try multiple possible locations
+        const contactKey = decoded.request?.contactKey || 
+                          decoded.inArguments?.[0]?.contactKey || 
+                          decoded.contactKey || 
+                          'UNKNOWN_CONTACT';
+                          
+        const journeyId = decoded.request?.currentActivity?.journey?.id || 
+                         decoded.journeyId || 
+                         'unknown';
+                         
+        const activityId = decoded.request?.currentActivity?.id || 
+                          decoded.activityId || 
+                          'unknown';
         
-        // Extract the custom message from inArguments
-        const inArguments = decoded.request?.currentActivity?.arguments?.execute?.inArguments || [];
-        const customMessage = inArguments.find(arg => arg.customMessage)?.customMessage || 'Contact processed by custom journey activity';
+        // Extract the custom message from inArguments - try multiple locations
+        const inArguments = decoded.request?.currentActivity?.arguments?.execute?.inArguments || 
+                           decoded.inArguments || 
+                           [];
+                           
+        const customMessage = inArguments.find(arg => arg.customMessage)?.customMessage || 
+                             decoded.customMessage ||
+                             'Contact processed by custom journey activity';
+        
+        console.log('Extracted data:', {
+            contactKey,
+            journeyId, 
+            activityId,
+            customMessage,
+            inArgumentsLength: inArguments.length
+        });
         
         console.log(`Processing contact: ${contactKey} in journey: ${journeyId}`);
         console.log(`Custom message to write: ${customMessage}`);
@@ -631,7 +654,12 @@ app.post('/test-jwt', (req, res) => {
             res.json({
                 status: 'success',
                 message: 'JWT parsed and verified successfully',
-                decoded: decoded
+                decoded: decoded,
+                extractedData: {
+                    contactKey: decoded.request?.contactKey || decoded.inArguments?.[0]?.contactKey || 'not_found',
+                    journeyId: decoded.request?.currentActivity?.journey?.id || 'not_found',
+                    inArguments: decoded.request?.currentActivity?.arguments?.execute?.inArguments || decoded.inArguments || []
+                }
             });
         } else {
             res.json({
