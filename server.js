@@ -108,34 +108,77 @@ async function updateDataExtensionRow(contactKey, customMessage) {
         console.log(`Updating data extension for contact: ${contactKey} with message: ${customMessage}`);
         
         const token = await retrieveToken();
-        const restUrl = `${sfmcConfig.restBaseUrl}/data/v1/async/dataextensions/key:${dataExtensionConfig.externalKey}/rows`;
         
-        // Use the correct payload structure for SFMC REST API with SubscriberKey
-        const payload = {
-            items: [{
-                SubscriberKey: contactKey,
-                CustomText: customMessage
-            }]
-        };
-        
-        console.log('Sending request to SFMC:', {
-            url: restUrl,
-            payload: payload
-        });
-        
-        const response = await axios.post(restUrl, payload, {
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
+        // Try multiple API endpoints to see which one works
+        const endpoints = [
+            {
+                name: 'Synchronous Data Events API',
+                url: `${sfmcConfig.restBaseUrl}/hub/v1/dataevents/key:${dataExtensionConfig.externalKey}/rowset`,
+                payload: [{
+                    keys: {
+                        SubscriberKey: contactKey
+                    },
+                    values: {
+                        SubscriberKey: contactKey,
+                        CustomText: customMessage
+                    }
+                }]
             },
-            timeout: 15000
-        });
+            {
+                name: 'Async Data Extensions API (current)',
+                url: `${sfmcConfig.restBaseUrl}/data/v1/async/dataextensions/key:${dataExtensionConfig.externalKey}/rows`,
+                payload: {
+                    items: [{
+                        SubscriberKey: contactKey,
+                        CustomText: customMessage
+                    }]
+                }
+            },
+            {
+                name: 'Async Data Extensions API with keys/values',
+                url: `${sfmcConfig.restBaseUrl}/data/v1/async/dataextensions/key:${dataExtensionConfig.externalKey}/rows`,
+                payload: {
+                    items: [{
+                        keys: {
+                            SubscriberKey: contactKey
+                        },
+                        values: {
+                            SubscriberKey: contactKey,
+                            CustomText: customMessage
+                        }
+                    }]
+                }
+            }
+        ];
         
-        console.log('Data Extension update successful:', response.status);
-        return response.data;
+        for (const endpoint of endpoints) {
+            try {
+                console.log(`Trying ${endpoint.name}:`, {
+                    url: endpoint.url,
+                    payload: JSON.stringify(endpoint.payload, null, 2)
+                });
+                
+                const response = await axios.post(endpoint.url, endpoint.payload, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    timeout: 15000
+                });
+                
+                console.log(`${endpoint.name} successful:`, response.status, response.data);
+                return response.data;
+                
+            } catch (error) {
+                console.log(`${endpoint.name} failed:`, error.response?.status, error.response?.data);
+                // Continue to next endpoint
+            }
+        }
+        
+        throw new Error('All API endpoints failed');
         
     } catch (error) {
-        console.error('Error updating data extension:', error.response?.data || error.message);
+        console.error('Error updating data extension:', error.message);
         throw error;
     }
 }
@@ -539,6 +582,33 @@ app.get('/debug-env', (req, res) => {
     });
 });
 
+// Test updating a specific existing contact
+app.get('/test-update-existing', async (req, res) => {
+    try {
+        const existingContactKey = '101010'; // From your data export
+        const testMessage = 'TEST UPDATE - ' + new Date().toISOString();
+        
+        console.log(`Testing update for existing contact: ${existingContactKey}`);
+        
+        const result = await updateDataExtensionRow(existingContactKey, testMessage);
+        
+        res.json({
+            status: 'success',
+            message: 'Update test completed',
+            contactKey: existingContactKey,
+            testMessage: testMessage,
+            result: result
+        });
+        
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            message: 'Update test failed',
+            error: error.message
+        });
+    }
+});
+
 // Simple ping endpoint for SFMC validation
 app.get('/ping', (req, res) => {
     res.status(200).send('pong');
@@ -680,6 +750,45 @@ app.get('/test-sfmc', async (req, res) => {
     }
 });
 
+// Query data extension to see what's actually there
+app.get('/query-de', async (req, res) => {
+    try {
+        const token = await retrieveToken();
+        const queryUrl = `${sfmcConfig.restBaseUrl}/data/v1/customobjectdata/key/${dataExtensionConfig.externalKey}/rowset`;
+        
+        const response = await axios.get(queryUrl, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            params: {
+                '$pageSize': 10,
+                '$orderBy': 'SubscriberKey desc'
+            }
+        });
+        
+        res.json({
+            status: 'success',
+            message: 'Data extension query successful',
+            dataExtension: {
+                name: dataExtensionConfig.name,
+                externalKey: dataExtensionConfig.externalKey
+            },
+            totalCount: response.data.count || 0,
+            items: response.data.items || [],
+            rawResponse: response.data
+        });
+        
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to query data extension',
+            error: error.message,
+            response: error.response?.data
+        });
+    }
+});
+
 // Get activity data by UUID (like the example)
 app.get('/activity/:uuid', async (req, res) => {
     const uuid = req.params.uuid;
@@ -713,41 +822,124 @@ app.get('/activity/:uuid', async (req, res) => {
     }
 });
 
-// Test data extension update with sample data
-app.get('/test-de-update', async (req, res) => {
+// Test data extension structure
+app.get('/test-de-structure', async (req, res) => {
     try {
-        if (!sfmcConfig.clientId || !sfmcConfig.clientSecret || !sfmcConfig.subdomain) {
-            return res.json({
-                status: 'error',
-                message: 'SFMC credentials not configured',
-                requiredEnvVars: [
-                    'SFMC_CLIENT_ID',
-                    'SFMC_CLIENT_SECRET', 
-                    'SFMC_SUBDOMAIN'
-                ]
-            });
-        }
+        const token = await retrieveToken();
+        const deUrl = `${sfmcConfig.restBaseUrl}/data/v1/async/dataextensions/key:${dataExtensionConfig.externalKey}`;
         
-        const testContactKey = 'TEST_CONTACT_' + Date.now();
-        const testMessage = 'Test message from custom activity - ' + new Date().toISOString();
-        
-        console.log('Testing data extension update...');
-        const result = await updateDataExtensionRow(testContactKey, testMessage);
+        const response = await axios.get(deUrl, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
         
         res.json({
             status: 'success',
-            message: 'Data extension update test successful',
-            testData: {
-                contactKey: testContactKey,
-                customMessage: testMessage
-            },
-            result: result
+            message: 'Data extension structure retrieved',
+            dataExtension: response.data,
+            fields: response.data.fields || 'No fields found'
         });
         
     } catch (error) {
         res.status(500).json({
             status: 'error',
-            message: 'Data extension update test failed',
+            message: 'Failed to get data extension structure',
+            error: error.message,
+            response: error.response?.data
+        });
+    }
+});
+
+// Test data extension update with different field combinations
+app.get('/test-de-update', async (req, res) => {
+    try {
+        const testContactKey = 'TEST_CONTACT_' + Date.now();
+        const testMessage = 'Test message - ' + new Date().toISOString();
+        
+        const token = await retrieveToken();
+        const restUrl = `${sfmcConfig.restBaseUrl}/data/v1/async/dataextensions/key:${dataExtensionConfig.externalKey}/rows`;
+        
+        // Try different payload structures
+        const payloads = [
+            {
+                name: 'SubscriberKey + CustomText',
+                payload: {
+                    items: [{
+                        SubscriberKey: testContactKey,
+                        CustomText: testMessage
+                    }]
+                }
+            },
+            {
+                name: 'ContactKey + CustomText',
+                payload: {
+                    items: [{
+                        ContactKey: testContactKey,
+                        CustomText: testMessage
+                    }]
+                }
+            },
+            {
+                name: 'Keys/Values structure with SubscriberKey',
+                payload: {
+                    items: [{
+                        keys: {
+                            SubscriberKey: testContactKey
+                        },
+                        values: {
+                            SubscriberKey: testContactKey,
+                            CustomText: testMessage
+                        }
+                    }]
+                }
+            }
+        ];
+        
+        const results = [];
+        
+        for (const test of payloads) {
+            try {
+                console.log(`Testing ${test.name}:`, JSON.stringify(test.payload, null, 2));
+                
+                const response = await axios.post(restUrl, test.payload, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    timeout: 15000
+                });
+                
+                results.push({
+                    name: test.name,
+                    status: 'success',
+                    statusCode: response.status,
+                    response: response.data
+                });
+                
+            } catch (error) {
+                results.push({
+                    name: test.name,
+                    status: 'error',
+                    statusCode: error.response?.status,
+                    error: error.response?.data || error.message
+                });
+            }
+        }
+        
+        res.json({
+            status: 'test_complete',
+            message: 'Data extension update tests completed',
+            testContactKey: testContactKey,
+            testMessage: testMessage,
+            results: results
+        });
+        
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            message: 'Test failed',
             error: error.message
         });
     }

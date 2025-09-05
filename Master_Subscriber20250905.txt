@@ -1,0 +1,4 @@
+SubscriberKey	Email Status	Email Address	Newsletter	Deals	Email Frequency	Hiking	Kayaking	Climbing	CustomText
+101010	Active	arrrushi@marketone.com	True	True	all	True	False	True	
+101011	Unsubscribed	aldorino.rrushi01@gmail.com	False	False	minimum	False	True	True	
+101012	Active	aldorino.rrushi@gmail.com	False	True	medium	False	True	False	
