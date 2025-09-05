@@ -35,14 +35,16 @@ async function getSFMCAccessToken() {
         console.log('Requesting SFMC token from:', authUrl);
         console.log('Using client ID:', sfmcConfig.clientId?.substring(0, 8) + '...');
         
-        const response = await axios.post(authUrl, {
-            grant_type: 'client_credentials',
-            client_id: sfmcConfig.clientId,
-            client_secret: sfmcConfig.clientSecret,
-            scope: 'data_extensions_read data_extensions_write'
-        }, {
+        // SFMC expects form-encoded data, not JSON
+        const params = new URLSearchParams();
+        params.append('grant_type', 'client_credentials');
+        params.append('client_id', sfmcConfig.clientId);
+        params.append('client_secret', sfmcConfig.clientSecret);
+        params.append('account_id', sfmcConfig.accountId);
+        
+        const response = await axios.post(authUrl, params, {
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/x-www-form-urlencoded'
             },
             timeout: 10000
         });
@@ -50,10 +52,13 @@ async function getSFMCAccessToken() {
         console.log('Token response received:', {
             token_type: response.data.token_type,
             expires_in: response.data.expires_in,
-            scope: response.data.scope
+            rest_instance_url: response.data.rest_instance_url
         });
         
-        return response.data.access_token;
+        return {
+            access_token: response.data.access_token,
+            rest_instance_url: response.data.rest_instance_url
+        };
     } catch (error) {
         console.error('Error getting SFMC access token:');
         console.error('Status:', error.response?.status);
@@ -66,22 +71,18 @@ async function getSFMCAccessToken() {
 async function updateDataExtensionRow(contactKey, customMessage) {
     try {
         console.log('Getting SFMC access token...');
-        const accessToken = await getSFMCAccessToken();
+        const authResult = await getSFMCAccessToken();
         console.log('Access token obtained successfully');
         
-        // Use synchronous endpoint (not async) - based on SFMC best practices
-        const restUrl = `https://${sfmcConfig.subdomain}.rest.marketingcloudapis.com/data/v1/async/dataextensions/key:${dataExtensionConfig.externalKey}/rows`;
+        // Use the REST instance URL from the auth response
+        const restBaseUrl = authResult.rest_instance_url || `https://${sfmcConfig.subdomain}.rest.marketingcloudapis.com`;
+        const restUrl = `${restBaseUrl}/data/v1/async/dataextensions/key:${dataExtensionConfig.externalKey}/rows`;
         
-        // Try different payload structures based on SFMC documentation
+        // Use the correct payload structure for SFMC REST API
         const payload = {
             items: [{
-                keys: {
-                    ContactKey: contactKey
-                },
-                values: {
-                    ContactKey: contactKey,
-                    CustomText: customMessage
-                }
+                ContactKey: contactKey,
+                CustomText: customMessage
             }]
         };
         
@@ -94,10 +95,10 @@ async function updateDataExtensionRow(contactKey, customMessage) {
             }
         });
         
-        // Try POST first (upsert behavior)
+        // Use POST for upsert behavior (insert or update)
         const response = await axios.post(restUrl, payload, {
             headers: {
-                'Authorization': `Bearer ${accessToken}`,
+                'Authorization': `Bearer ${authResult.access_token}`,
                 'Content-Type': 'application/json'
             },
             timeout: 15000 // 15 second timeout
@@ -116,18 +117,23 @@ async function updateDataExtensionRow(contactKey, customMessage) {
         
         // Try alternative payload structure if first attempt fails
         if (error.response?.status === 400) {
-            console.log('Trying alternative payload structure...');
+            console.log('Trying alternative payload structure with keys/values...');
             try {
                 const alternativePayload = {
                     items: [{
-                        ContactKey: contactKey,
-                        CustomText: customMessage
+                        keys: {
+                            ContactKey: contactKey
+                        },
+                        values: {
+                            ContactKey: contactKey,
+                            CustomText: customMessage
+                        }
                     }]
                 };
                 
                 const alternativeResponse = await axios.post(restUrl, alternativePayload, {
                     headers: {
-                        'Authorization': `Bearer ${accessToken}`,
+                        'Authorization': `Bearer ${authResult.access_token}`,
                         'Content-Type': 'application/json'
                     },
                     timeout: 15000
@@ -713,16 +719,19 @@ app.get('/test-sfmc', async (req, res) => {
             });
         }
         
-        const accessToken = await getSFMCAccessToken();
+        const authResult = await getSFMCAccessToken();
         
         res.json({
             status: 'success',
             message: 'SFMC connection successful',
+            authResult: {
+                tokenReceived: !!authResult.access_token,
+                restInstanceUrl: authResult.rest_instance_url
+            },
             dataExtension: {
                 name: dataExtensionConfig.name,
                 externalKey: dataExtensionConfig.externalKey
-            },
-            tokenReceived: !!accessToken
+            }
         });
         
     } catch (error) {
@@ -784,14 +793,15 @@ app.get('/debug-de', async (req, res) => {
             });
         }
         
-        const accessToken = await getSFMCAccessToken();
+        const authResult = await getSFMCAccessToken();
         
-        // Get data extension details
-        const deUrl = `https://${sfmcConfig.subdomain}.rest.marketingcloudapis.com/data/v1/async/dataextensions/key:${dataExtensionConfig.externalKey}`;
+        // Get data extension details using the correct REST instance URL
+        const restBaseUrl = authResult.rest_instance_url || `https://${sfmcConfig.subdomain}.rest.marketingcloudapis.com`;
+        const deUrl = `${restBaseUrl}/data/v1/async/dataextensions/key:${dataExtensionConfig.externalKey}`;
         
         const response = await axios.get(deUrl, {
             headers: {
-                'Authorization': `Bearer ${accessToken}`,
+                'Authorization': `Bearer ${authResult.access_token}`,
                 'Content-Type': 'application/json'
             }
         });
@@ -803,7 +813,8 @@ app.get('/debug-de', async (req, res) => {
             config: {
                 externalKey: dataExtensionConfig.externalKey,
                 name: dataExtensionConfig.name
-            }
+            },
+            restBaseUrl: restBaseUrl
         });
         
     } catch (error) {
