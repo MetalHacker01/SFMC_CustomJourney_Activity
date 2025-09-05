@@ -27,32 +27,22 @@ const dataExtensionConfig = {
     name: process.env.DE_NAME || 'Master_Subscriber'
 };
 
-// SFMC API Helper Functions
+// Activity Log Data Extension Configuration (like the example's database table)
+const activityLogConfig = {
+    externalKey: process.env.ACTIVITY_LOG_DE_KEY || 'CustomActivity_Log',
+    name: process.env.ACTIVITY_LOG_DE_NAME || 'Custom_Activity_Execution_Log'
+};
+
+// SFMC API Helper Functions - simplified like the example
 async function getSFMCAccessToken() {
+    const tokenURL = `https://${sfmcConfig.subdomain}.auth.marketingcloudapis.com/v2/token`;
+    
     try {
-        const authUrl = `https://${sfmcConfig.subdomain}.auth.marketingcloudapis.com/v2/token`;
-        
-        console.log('Requesting SFMC token from:', authUrl);
-        console.log('Using client ID:', sfmcConfig.clientId?.substring(0, 8) + '...');
-        
-        // SFMC expects form-encoded data, not JSON
-        const params = new URLSearchParams();
-        params.append('grant_type', 'client_credentials');
-        params.append('client_id', sfmcConfig.clientId);
-        params.append('client_secret', sfmcConfig.clientSecret);
-        params.append('account_id', sfmcConfig.accountId);
-        
-        const response = await axios.post(authUrl, params, {
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            timeout: 10000
-        });
-        
-        console.log('Token response received:', {
-            token_type: response.data.token_type,
-            expires_in: response.data.expires_in,
-            rest_instance_url: response.data.rest_instance_url
+        const response = await axios.post(tokenURL, {
+            grant_type: 'client_credentials',
+            client_id: sfmcConfig.clientId,
+            client_secret: sfmcConfig.clientSecret,
+            account_id: sfmcConfig.accountId
         });
         
         return {
@@ -60,11 +50,44 @@ async function getSFMCAccessToken() {
             rest_instance_url: response.data.rest_instance_url
         };
     } catch (error) {
-        console.error('Error getting SFMC access token:');
-        console.error('Status:', error.response?.status);
-        console.error('Response:', error.response?.data);
-        console.error('Message:', error.message);
+        console.error('Error retrieving SFMC token:', error.response?.data || error.message);
         throw error;
+    }
+}
+
+// Function to save activity execution data to SFMC Data Extension (like the example saves to database)
+async function saveActivityExecution(data) {
+    try {
+        const authResult = await getSFMCAccessToken();
+        const restBaseUrl = authResult.rest_instance_url || `https://${sfmcConfig.subdomain}.rest.marketingcloudapis.com`;
+        const restUrl = `${restBaseUrl}/data/v1/async/dataextensions/key:${activityLogConfig.externalKey}/rows`;
+        
+        const payload = {
+            items: [{
+                ContactKey: data.contactKey,
+                ActivityUUID: data.uuid,
+                ExecutionDate: data.executionDate.toISOString(),
+                Status: data.status,
+                CustomMessage: data.customMessage,
+                ErrorLog: data.errorLog || null
+            }]
+        };
+        
+        console.log(`Saving activity execution to log DE: ${activityLogConfig.externalKey}`);
+        
+        const response = await axios.post(restUrl, payload, {
+            headers: {
+                'Authorization': `Bearer ${authResult.access_token}`,
+                'Content-Type': 'application/json'
+            },
+            timeout: 15000
+        });
+        
+        return response.data;
+    } catch (error) {
+        console.error('Error saving activity execution to log data extension:', error.response?.data || error.message);
+        // Don't throw error for logging failures - just log and continue
+        return null;
     }
 }
 
@@ -327,76 +350,32 @@ app.post('/save', (req, res) => {
     }
 });
 
-// Execute endpoint - called when contact enters the activity
+// Execute endpoint - called when contact enters the activity (following example pattern)
 app.post('/execute', async (req, res) => {
-    console.log('Execute endpoint called');
-    
-    // Set a timeout to ensure we always respond
-    const timeout = setTimeout(() => {
-        if (!res.headersSent) {
-            console.log('Execute timeout - sending default response');
-            res.status(200).json({
-                status: 'timeout',
-                message: 'Request timed out but contact continues',
-                timestamp: new Date().toISOString()
-            });
-        }
-    }, 25000); // 25 second timeout
-    
     try {
-        console.log('Request body type:', typeof req.body);
-        console.log('Request body keys:', Object.keys(req.body || {}));
-        console.log('Content-Type:', req.headers['content-type']);
-        
-        // Extract JWT token from various possible locations
+        // Extract data from JWT token
         const token = req.body.keyValue || req.body.jwt || req.body;
         
         if (!token) {
             console.error('No JWT token provided in execute request');
-            clearTimeout(timeout);
-            return res.status(200).json({
-                status: 'error',
-                message: 'No JWT token provided - contact will continue in journey',
-                timestamp: new Date().toISOString()
-            });
+            return res.status(200).send('Execute'); // Always return success to continue journey
         }
         
-        // Decode the JWT token to get contact and journey data
         let decoded;
         try {
             const tokenString = typeof token === 'string' ? token : token.toString();
-            console.log('Attempting to decode JWT token...');
             decoded = jwt.verify(tokenString, jwtSecret);
-            console.log('JWT decoded successfully');
         } catch (jwtError) {
             console.error('JWT validation failed:', jwtError.message);
-            clearTimeout(timeout);
-            return res.status(200).json({
-                status: 'error',
-                message: 'Invalid JWT token - contact will continue in journey',
-                error: jwtError.message,
-                timestamp: new Date().toISOString()
-            });
+            return res.status(200).send('Execute'); // Continue journey even if JWT fails
         }
         
-        console.log('JWT decoded successfully, extracting data...');
-        console.log('Full decoded JWT structure:', JSON.stringify(decoded, null, 2));
-        
-        // Extract contact data from the JWT - try multiple possible locations
+        // Extract contact and activity data
         const contactKey = decoded.request?.contactKey || 
                           decoded.inArguments?.[0]?.contactKey || 
                           decoded.contactKey || 
                           'UNKNOWN_CONTACT';
                           
-        const journeyId = decoded.request?.currentActivity?.journey?.id || 
-                         decoded.journeyId || 
-                         'unknown';
-                         
-        const activityId = decoded.request?.currentActivity?.id || 
-                          decoded.activityId || 
-                          'unknown';
-        
-        // Extract the custom message from inArguments - try multiple locations
         const inArguments = decoded.request?.currentActivity?.arguments?.execute?.inArguments || 
                            decoded.inArguments || 
                            [];
@@ -404,97 +383,51 @@ app.post('/execute', async (req, res) => {
         const customMessage = inArguments.find(arg => arg.customMessage)?.customMessage || 
                              decoded.customMessage ||
                              'Contact processed by custom journey activity';
+                             
+        const uuid = inArguments.find(arg => arg.uuid)?.uuid || 
+                    decoded.uuid || 
+                    'unknown-' + Date.now();
         
-        console.log('Extracted data:', {
-            contactKey,
-            journeyId, 
-            activityId,
-            customMessage,
-            inArgumentsLength: inArguments.length
-        });
+        console.log(`Processing contact: ${contactKey}, UUID: ${uuid}`);
         
-        console.log(`Processing contact: ${contactKey} in journey: ${journeyId}`);
-        console.log(`Custom message to write: ${customMessage}`);
+        // Prepare execution data for logging (like the example)
+        const executionData = {
+            uuid: uuid,
+            contactKey: contactKey,
+            executionDate: new Date(),
+            status: 'Success',
+            customMessage: customMessage,
+            errorLog: null
+        };
         
-        // Check if we have the required SFMC credentials
-        if (!sfmcConfig.clientId || !sfmcConfig.clientSecret || !sfmcConfig.subdomain) {
-            console.warn('SFMC credentials not configured, skipping data extension update');
-            clearTimeout(timeout);
-            
-            return res.status(200).json({
-                status: 'success',
-                message: 'Contact processed successfully (SFMC update skipped - credentials not configured)',
-                data: {
-                    contactKey: contactKey,
-                    journeyId: journeyId,
-                    activityId: activityId,
-                    customMessage: customMessage,
-                    timestamp: new Date().toISOString(),
-                    sfmcUpdateSkipped: true
-                }
-            });
-        }
-        
-        // Update the data extension with the custom message
         try {
-            console.log(`Attempting to update data extension for contact: ${contactKey}`);
-            console.log(`Message to write: ${customMessage}`);
+            // Update the main data extension with custom message
+            await updateDataExtensionRow(contactKey, customMessage);
             
-            const updateResult = await updateDataExtensionRow(contactKey, customMessage);
+            // Log the execution (like the example logs to database)
+            await saveActivityExecution(executionData);
             
-            console.log(`Successfully updated data extension for contact: ${contactKey}`);
-            clearTimeout(timeout);
+            console.log(`Successfully processed contact: ${contactKey}`);
             
-            // Respond with success
-            res.status(200).json({
-                status: 'success',
-                message: 'Contact processed and data extension updated successfully',
-                data: {
-                    contactKey: contactKey,
-                    journeyId: journeyId,
-                    activityId: activityId,
-                    customMessage: customMessage,
-                    timestamp: new Date().toISOString(),
-                    dataExtension: {
-                        externalKey: dataExtensionConfig.externalKey,
-                        name: dataExtensionConfig.name
-                    },
-                    sfmcUpdateResult: updateResult
-                }
-            });
+        } catch (error) {
+            console.error('Error processing contact:', error);
             
-        } catch (sfmcError) {
-            console.error('Failed to update SFMC data extension:', sfmcError);
-            clearTimeout(timeout);
+            // Log the error but continue journey
+            executionData.status = 'Error';
+            executionData.errorLog = error.message;
             
-            // Still return success but indicate the SFMC update failed
-            res.status(200).json({
-                status: 'partial_success',
-                message: 'Contact processed but data extension update failed',
-                data: {
-                    contactKey: contactKey,
-                    journeyId: journeyId,
-                    activityId: activityId,
-                    customMessage: customMessage,
-                    timestamp: new Date().toISOString(),
-                    error: sfmcError.message
-                }
-            });
+            try {
+                await saveActivityExecution(executionData);
+            } catch (logError) {
+                console.error('Error saving execution log:', logError);
+            }
         }
+        
+        res.status(200).send('Execute'); // Simple response like the example
         
     } catch (error) {
         console.error('Error in execute endpoint:', error);
-        clearTimeout(timeout);
-        
-        // Always return 200 for execute endpoint to prevent journey failures
-        if (!res.headersSent) {
-            res.status(200).json({
-                status: 'error',
-                message: 'Processing failed but contact will continue in journey',
-                error: error.message,
-                timestamp: new Date().toISOString()
-            });
-        }
+        res.status(200).send('Execute'); // Ensure journey continues
     }
 });
 
@@ -634,6 +567,22 @@ app.get('/health', (req, res) => {
     });
 });
 
+// Debug environment variables
+app.get('/debug-env', (req, res) => {
+    res.json({
+        status: 'debug',
+        message: 'Environment variables check',
+        sfmcConfig: {
+            clientId: sfmcConfig.clientId ? sfmcConfig.clientId.substring(0, 8) + '...' : 'NOT_SET',
+            clientSecret: sfmcConfig.clientSecret ? '***SET***' : 'NOT_SET',
+            subdomain: sfmcConfig.subdomain || 'NOT_SET',
+            accountId: sfmcConfig.accountId || 'NOT_SET'
+        },
+        authUrl: `https://${sfmcConfig.subdomain}.auth.marketingcloudapis.com/v2/token`,
+        expectedSubdomain: 'mcpymzz7w7nbc2rxvym6ydvl-3m4'
+    });
+});
+
 // Simple ping endpoint for SFMC validation
 app.get('/ping', (req, res) => {
     res.status(200).send('pong');
@@ -740,6 +689,39 @@ app.get('/test-sfmc', async (req, res) => {
             message: 'SFMC connection failed',
             error: error.message
         });
+    }
+});
+
+// Get activity data by UUID (like the example)
+app.get('/activity/:uuid', async (req, res) => {
+    const uuid = req.params.uuid;
+    
+    try {
+        const authResult = await getSFMCAccessToken();
+        const restBaseUrl = authResult.rest_instance_url || `https://${sfmcConfig.subdomain}.rest.marketingcloudapis.com`;
+        
+        // Query log data extension for records with this UUID
+        const queryUrl = `${restBaseUrl}/data/v1/customobjectdata/key/${activityLogConfig.externalKey}/rowset`;
+        
+        const response = await axios.get(queryUrl, {
+            headers: {
+                'Authorization': `Bearer ${authResult.access_token}`,
+                'Content-Type': 'application/json'
+            },
+            params: {
+                '$filter': `ActivityUUID eq '${uuid}'`
+            }
+        });
+        
+        if (response.data.items && response.data.items.length > 0) {
+            res.json(response.data.items);
+        } else {
+            res.status(404).send('Activity not found');
+        }
+        
+    } catch (error) {
+        console.error('Error retrieving activity data:', error.response?.data || error.message);
+        res.status(500).send('Internal Server Error');
     }
 });
 

@@ -146,18 +146,37 @@
             save();
         });
         
-        // Save function - called when Done is clicked
+        // Generate UUID like the example
+        function generateUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+
+        // Save function - called when Done is clicked (following example pattern)
         function save() {
-            const customMessage = document.getElementById('message-text').value || 'Default custom message';
+            const customMessage = document.getElementById('message-text').value || 'Contact processed by custom journey activity';
+            
+            // Generate or use existing UUID
+            let uuid = null;
+            if (activityPayload.arguments && activityPayload.arguments.execute && activityPayload.arguments.execute.inArguments && activityPayload.arguments.execute.inArguments.length > 0) {
+                uuid = activityPayload.arguments.execute.inArguments[0].uuid;
+            }
+            if (!uuid) {
+                uuid = generateUUID();
+            }
             
             // Update the activity payload with our configuration
             activityPayload.name = document.getElementById('activity-name').value || 'Custom Data Extension Update';
             
-            // Set the arguments that will be passed to the execute endpoint
+            // Set the arguments that will be passed to the execute endpoint (like the example)
             activityPayload.arguments.execute.inArguments = [{
                 contactKey: "{{Contact.Key}}",
                 emailAddress: "{{InteractionDefaults.Email}}",
-                customMessage: customMessage
+                customMessage: customMessage,
+                uuid: uuid,
+                timestamp: new Date().toISOString()
             }];
             
             // Mark as configured
@@ -166,7 +185,7 @@
             // Send the updated activity back to Journey Builder
             connection.trigger('updateActivity', activityPayload);
             
-            console.log('Activity configuration saved:', activityPayload);
+            console.log('Activity configuration saved with UUID:', uuid);
         }
         
         // Listen for form field changes to validate in real-time
