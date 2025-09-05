@@ -1,16 +1,16 @@
 {
   "workflowApiVersion": "1.1",
   "metaData": {
-  "icon": "https://raw.githubusercontent.com/mallowigi/a-file-icon-vscode/master/logo.png?sanitize=true",
+    "icon": "https://www.washingtonpost.com/graphics/national/security-of-the-internet/glossary/img/hat.jpg",
     "category": "message",
-    "displayName": "Custom Flag Activity",
-    "description": "A simple custom activity that adds flags and logs contact processing"
+    "displayName": "Custom Data Extension Updater",
+    "description": "Updates custom text field in data extensions when contacts enter the activity"
   },
   "type": "REST",
   "lang": {
     "en-US": {
-      "name": "Custom Flag Activity",
-      "description": "Adds custom flags and processes contacts in Journey Builder"
+      "name": "Custom Data Extension Updater",
+      "description": "Updates data extension fields with custom messages for each contact"
     }
   },
   "arguments": {
