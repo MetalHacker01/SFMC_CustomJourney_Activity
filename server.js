@@ -183,29 +183,20 @@ async function updateDataExtensionRow(contactKey, customMessage) {
     }
 }
 
-// Add detailed request logging
+// Simplified request logging
 app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
-    console.log('Headers:', req.headers);
-    
-    if (req.body) {
-        if (typeof req.body === 'string') {
-            console.log('Body (string):', req.body.substring(0, 200) + '...');
-        } else if (Object.keys(req.body).length > 0) {
-            console.log('Body (object):', JSON.stringify(req.body, null, 2));
-        } else {
-            console.log('Body: empty object');
-        }
-    } else {
-        console.log('Body: null/undefined');
-    }
     next();
 });
 
 // Middleware
 app.use(cors());
 
-// Custom middleware to handle JWT tokens sent as raw text
+// Simplified middleware setup
+app.use(bodyParser.json({ limit: '10mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
+
+// Handle JWT tokens sent as raw text (simplified)
 app.use((req, res, next) => {
     const contentType = req.headers['content-type'];
     
@@ -219,7 +210,6 @@ app.use((req, res, next) => {
         
         req.on('end', () => {
             try {
-                console.log(`Raw ${contentType} token received:`, body.substring(0, 100) + '...');
                 req.body = { jwt: body.trim() };
                 next();
             } catch (error) {
@@ -239,37 +229,13 @@ app.use((req, res, next) => {
     }
 });
 
-// Only use JSON parser for non-JWT content
-app.use((req, res, next) => {
-    const contentType = req.headers['content-type'];
-    if (contentType === 'application/jwt' || contentType === 'text/plain') {
-        next(); // Skip JSON parsing for JWT content
-    } else {
-        bodyParser.json({ limit: '10mb' })(req, res, next);
-    }
-});
-
-app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
-
-// Error handling middleware for JSON parsing
+// Simplified error handling
 app.use((error, req, res, next) => {
-    if (error instanceof SyntaxError && error.status === 400 && 'body' in error) {
-        console.error('Bad JSON:', error.message);
-        return res.status(200).json({
-            status: 'error',
-            message: 'Invalid JSON in request body - continuing'
-        });
-    }
-    next(error);
-});
-
-// Global error handler
-app.use((error, req, res, next) => {
-    console.error('Unhandled error:', error);
+    console.error('Error:', error.message);
     if (!res.headersSent) {
         res.status(200).json({
             status: 'error',
-            message: 'Internal server error - continuing',
+            message: 'Server error but continuing',
             timestamp: new Date().toISOString()
         });
     }
@@ -350,84 +316,60 @@ app.post('/save', (req, res) => {
     }
 });
 
-// Execute endpoint - called when contact enters the activity (following example pattern)
+// Execute endpoint - simplified and more robust
 app.post('/execute', async (req, res) => {
+    console.log('Execute endpoint called');
+    
     try {
-        // Extract data from JWT token
+        // Always respond quickly to prevent timeouts
+        res.status(200).send('Execute');
+        
+        // Process in background
         const token = req.body.keyValue || req.body.jwt || req.body;
         
-        if (!token) {
-            console.error('No JWT token provided in execute request');
-            return res.status(200).send('Execute'); // Always return success to continue journey
+        if (!token || !jwtSecret) {
+            console.log('No JWT token or secret - skipping processing');
+            return;
         }
         
-        let decoded;
         try {
             const tokenString = typeof token === 'string' ? token : token.toString();
-            decoded = jwt.verify(tokenString, jwtSecret);
-        } catch (jwtError) {
-            console.error('JWT validation failed:', jwtError.message);
-            return res.status(200).send('Execute'); // Continue journey even if JWT fails
-        }
-        
-        // Extract contact and activity data
-        const contactKey = decoded.request?.contactKey || 
-                          decoded.inArguments?.[0]?.contactKey || 
-                          decoded.contactKey || 
-                          'UNKNOWN_CONTACT';
-                          
-        const inArguments = decoded.request?.currentActivity?.arguments?.execute?.inArguments || 
-                           decoded.inArguments || 
-                           [];
-                           
-        const customMessage = inArguments.find(arg => arg.customMessage)?.customMessage || 
-                             decoded.customMessage ||
-                             'Contact processed by custom journey activity';
-                             
-        const uuid = inArguments.find(arg => arg.uuid)?.uuid || 
-                    decoded.uuid || 
-                    'unknown-' + Date.now();
-        
-        console.log(`Processing contact: ${contactKey}, UUID: ${uuid}`);
-        
-        // Prepare execution data for logging (like the example)
-        const executionData = {
-            uuid: uuid,
-            contactKey: contactKey,
-            executionDate: new Date(),
-            status: 'Success',
-            customMessage: customMessage,
-            errorLog: null
-        };
-        
-        try {
-            // Update the main data extension with custom message
-            await updateDataExtensionRow(contactKey, customMessage);
+            const decoded = jwt.verify(tokenString, jwtSecret);
             
-            // Log the execution (like the example logs to database)
-            await saveActivityExecution(executionData);
+            // Extract contact data
+            const contactKey = decoded.request?.contactKey || 
+                              decoded.inArguments?.[0]?.contactKey || 
+                              decoded.contactKey || 
+                              'UNKNOWN_CONTACT';
+                              
+            const inArguments = decoded.request?.currentActivity?.arguments?.execute?.inArguments || 
+                               decoded.inArguments || 
+                               [];
+                               
+            const customMessage = inArguments.find(arg => arg.customMessage)?.customMessage || 
+                                 'Contact processed by custom journey activity';
             
-            console.log(`Successfully processed contact: ${contactKey}`);
+            console.log(`Processing contact: ${contactKey} with message: ${customMessage}`);
             
-        } catch (error) {
-            console.error('Error processing contact:', error);
-            
-            // Log the error but continue journey
-            executionData.status = 'Error';
-            executionData.errorLog = error.message;
-            
-            try {
-                await saveActivityExecution(executionData);
-            } catch (logError) {
-                console.error('Error saving execution log:', logError);
+            // Try to update data extension (don't fail if SFMC is not configured)
+            if (sfmcConfig.clientId && sfmcConfig.clientSecret && sfmcConfig.subdomain) {
+                try {
+                    await updateDataExtensionRow(contactKey, customMessage);
+                    console.log(`Successfully updated data extension for contact: ${contactKey}`);
+                } catch (sfmcError) {
+                    console.error('SFMC update failed:', sfmcError.message);
+                }
+            } else {
+                console.log('SFMC not configured - skipping data extension update');
             }
+            
+        } catch (jwtError) {
+            console.error('JWT processing failed:', jwtError.message);
         }
-        
-        res.status(200).send('Execute'); // Simple response like the example
         
     } catch (error) {
-        console.error('Error in execute endpoint:', error);
-        res.status(200).send('Execute'); // Ensure journey continues
+        console.error('Execute endpoint error:', error);
+        // Response already sent, so just log the error
     }
 });
 
