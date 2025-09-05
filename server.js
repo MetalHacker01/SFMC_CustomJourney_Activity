@@ -43,39 +43,36 @@ const activityLogConfig = {
     name: process.env.ACTIVITY_LOG_DE_NAME || 'Custom_Activity_Execution_Log'
 };
 
-// SFMC API Helper Functions - following the example pattern
-async function getSFMCAccessToken() {
-    console.log('SFMC Token Request Details:');
-    console.log('- Auth URL:', sfmcConfig.authUrl);
-    console.log('- Client ID:', sfmcConfig.clientId?.substring(0, 8) + '...');
-    
+// SFMC API Helper Functions - following the example pattern exactly
+async function retrieveToken() {
     try {
+        console.log('Retrieving SFMC token from:', sfmcConfig.authUrl);
         const response = await axios.post(sfmcConfig.authUrl, {
             grant_type: 'client_credentials',
             client_id: sfmcConfig.clientId,
-            client_secret: sfmcConfig.clientSecret,
-            account_id: sfmcConfig.accountId
+            client_secret: sfmcConfig.clientSecret
         });
-        
-        return {
-            access_token: response.data.access_token,
-            rest_instance_url: response.data.rest_instance_url
-        };
+        return response.data.access_token;
     } catch (error) {
-        console.error('SFMC Token Error Details:');
-        console.error('- URL attempted:', sfmcConfig.authUrl);
-        console.error('- Error:', error.message);
-        console.error('- Response:', error.response?.data);
+        console.error('Error retrieving token:', error.response?.data || error.message);
         throw error;
     }
+}
+
+// Keep the old function for backward compatibility
+async function getSFMCAccessToken() {
+    const token = await retrieveToken();
+    return {
+        access_token: token,
+        rest_instance_url: sfmcConfig.restBaseUrl
+    };
 }
 
 // Function to save activity execution data to SFMC Data Extension (like the example saves to database)
 async function saveActivityExecution(data) {
     try {
-        const authResult = await getSFMCAccessToken();
-        const restBaseUrl = authResult.rest_instance_url || sfmcConfig.restBaseUrl;
-        const restUrl = `${restBaseUrl}/data/v1/async/dataextensions/key:${activityLogConfig.externalKey}/rows`;
+        const token = await retrieveToken();
+        const restUrl = `${sfmcConfig.restBaseUrl}/data/v1/async/dataextensions/key:${activityLogConfig.externalKey}/rows`;
         
         const payload = {
             items: [{
@@ -92,7 +89,7 @@ async function saveActivityExecution(data) {
         
         const response = await axios.post(restUrl, payload, {
             headers: {
-                'Authorization': `Bearer ${authResult.access_token}`,
+                'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
             },
             timeout: 15000
@@ -108,13 +105,10 @@ async function saveActivityExecution(data) {
 
 async function updateDataExtensionRow(contactKey, customMessage) {
     try {
-        console.log('Getting SFMC access token...');
-        const authResult = await getSFMCAccessToken();
-        console.log('Access token obtained successfully');
+        console.log(`Updating data extension for contact: ${contactKey} with message: ${customMessage}`);
         
-        // Use the REST instance URL from the auth response or fallback to configured URL
-        const restBaseUrl = authResult.rest_instance_url || sfmcConfig.restBaseUrl;
-        const restUrl = `${restBaseUrl}/data/v1/async/dataextensions/key:${dataExtensionConfig.externalKey}/rows`;
+        const token = await retrieveToken();
+        const restUrl = `${sfmcConfig.restBaseUrl}/data/v1/async/dataextensions/key:${dataExtensionConfig.externalKey}/rows`;
         
         // Use the correct payload structure for SFMC REST API with SubscriberKey
         const payload = {
@@ -126,75 +120,23 @@ async function updateDataExtensionRow(contactKey, customMessage) {
         
         console.log('Sending request to SFMC:', {
             url: restUrl,
-            payload: payload,
-            dataExtension: {
-                name: dataExtensionConfig.name,
-                externalKey: dataExtensionConfig.externalKey
-            }
+            payload: payload
         });
         
-        // Use POST for upsert behavior (insert or update)
         const response = await axios.post(restUrl, payload, {
             headers: {
-                'Authorization': `Bearer ${authResult.access_token}`,
+                'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
             },
-            timeout: 15000 // 15 second timeout
+            timeout: 15000
         });
         
-        console.log('Data Extension update response status:', response.status);
-        console.log('Data Extension update response:', response.data);
+        console.log('Data Extension update successful:', response.status);
         return response.data;
         
     } catch (error) {
-        console.error('Error updating data extension:');
-        console.error('Status:', error.response?.status);
-        console.error('Status Text:', error.response?.statusText);
-        console.error('Response Data:', error.response?.data);
-        console.error('Error Message:', error.message);
-        
-        // Try alternative payload structure if first attempt fails
-        if (error.response?.status === 400) {
-            console.log('Trying alternative payload structure with keys/values...');
-            try {
-                const alternativePayload = {
-                    items: [{
-                        keys: {
-                            SubscriberKey: contactKey
-                        },
-                        values: {
-                            SubscriberKey: contactKey,
-                            CustomText: customMessage
-                        }
-                    }]
-                };
-                
-                const alternativeResponse = await axios.post(restUrl, alternativePayload, {
-                    headers: {
-                        'Authorization': `Bearer ${authResult.access_token}`,
-                        'Content-Type': 'application/json'
-                    },
-                    timeout: 15000
-                });
-                
-                console.log('Alternative payload succeeded:', alternativeResponse.data);
-                return alternativeResponse.data;
-                
-            } catch (altError) {
-                console.error('Alternative payload also failed:', altError.response?.data);
-            }
-        }
-        
-        // Provide more specific error information
-        if (error.response?.status === 401) {
-            throw new Error('SFMC Authentication failed - check credentials');
-        } else if (error.response?.status === 404) {
-            throw new Error(`Data Extension not found: ${dataExtensionConfig.externalKey}`);
-        } else if (error.response?.status === 400) {
-            throw new Error(`Bad request: ${error.response?.data?.message || 'Invalid data format'}`);
-        } else {
-            throw new Error(`SFMC API error: ${error.message}`);
-        }
+        console.error('Error updating data extension:', error.response?.data || error.message);
+        throw error;
     }
 }
 
@@ -334,16 +276,63 @@ app.post('/save', (req, res) => {
 // Execute endpoint - simplified and more robust
 app.post('/execute', async (req, res) => {
     console.log('Execute endpoint called');
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
     
     try {
-        // Always respond quickly to prevent timeouts
-        res.status(200).send('Execute');
+        // Check if we have inArguments like the example
+        if (req.body.inArguments && req.body.inArguments.length > 0) {
+            console.log('Processing inArguments directly (like the example)');
+            
+            const inArguments = req.body.inArguments[0];
+            const contactKey = inArguments.contactKey || inArguments.subscriberKey || 'UNKNOWN_CONTACT';
+            const customMessage = inArguments.customMessage || 'Contact processed by custom journey activity';
+            const uuid = inArguments.uuid || 'unknown-' + Date.now();
+            
+            console.log(`Processing contact: ${contactKey}, UUID: ${uuid}, Message: ${customMessage}`);
+            
+            // Prepare execution data for logging
+            const executionData = {
+                uuid: uuid,
+                contactKey: contactKey,
+                executionDate: new Date(),
+                status: 'Success',
+                customMessage: customMessage,
+                errorLog: null
+            };
+            
+            try {
+                // Update the main data extension with custom message
+                await updateDataExtensionRow(contactKey, customMessage);
+                console.log(`Successfully updated data extension for contact: ${contactKey}`);
+                
+                // Log the execution
+                await saveActivityExecution(executionData);
+                
+            } catch (error) {
+                console.error('Error processing contact:', error);
+                
+                // Log the error but continue journey
+                executionData.status = 'Error';
+                executionData.errorLog = error.message;
+                
+                try {
+                    await saveActivityExecution(executionData);
+                } catch (logError) {
+                    console.error('Error saving execution log:', logError);
+                }
+            }
+            
+            res.status(200).send('Execute');
+            return;
+        }
         
-        // Process in background
+        // Fallback: Try JWT parsing if no inArguments
+        console.log('No inArguments found, trying JWT parsing...');
         const token = req.body.keyValue || req.body.jwt || req.body;
         
         if (!token || !jwtSecret) {
-            console.log('No JWT token or secret - skipping processing');
+            console.log('No JWT token or secret - sending success anyway');
+            res.status(200).send('Execute');
             return;
         }
         
@@ -351,7 +340,7 @@ app.post('/execute', async (req, res) => {
             const tokenString = typeof token === 'string' ? token : token.toString();
             const decoded = jwt.verify(tokenString, jwtSecret);
             
-            // Extract contact data - try both contactKey and subscriberKey
+            // Extract contact data from JWT
             const contactKey = decoded.request?.contactKey || 
                               decoded.inArguments?.[0]?.contactKey || 
                               decoded.inArguments?.[0]?.subscriberKey ||
@@ -366,10 +355,10 @@ app.post('/execute', async (req, res) => {
             const customMessage = inArguments.find(arg => arg.customMessage)?.customMessage || 
                                  'Contact processed by custom journey activity';
             
-            console.log(`Processing contact: ${contactKey} with message: ${customMessage}`);
+            console.log(`Processing contact from JWT: ${contactKey} with message: ${customMessage}`);
             
-            // Try to update data extension (don't fail if SFMC is not configured)
-            if (sfmcConfig.clientId && sfmcConfig.clientSecret && sfmcConfig.subdomain) {
+            // Try to update data extension
+            if (sfmcConfig.clientId && sfmcConfig.clientSecret) {
                 try {
                     await updateDataExtensionRow(contactKey, customMessage);
                     console.log(`Successfully updated data extension for contact: ${contactKey}`);
@@ -384,9 +373,11 @@ app.post('/execute', async (req, res) => {
             console.error('JWT processing failed:', jwtError.message);
         }
         
+        res.status(200).send('Execute');
+        
     } catch (error) {
         console.error('Execute endpoint error:', error);
-        // Response already sent, so just log the error
+        res.status(200).send('Execute'); // Always return success to continue journey
     }
 });
 
@@ -558,6 +549,18 @@ app.post('/ping', (req, res) => {
 });
 
 // Test JWT parsing endpoint
+app.get('/test-jwt', (req, res) => {
+    res.json({
+        status: 'info',
+        message: 'This is a GET endpoint. Use POST /test-jwt to test JWT parsing.',
+        availableEndpoints: [
+            'POST /test-jwt - Test JWT parsing',
+            'GET /debug-env - Check environment variables',
+            'GET /test-sfmc - Test SFMC connection'
+        ]
+    });
+});
+
 app.post('/test-jwt', (req, res) => {
     console.log('Test JWT endpoint called');
     console.log('Content-Type:', req.headers['content-type']);
